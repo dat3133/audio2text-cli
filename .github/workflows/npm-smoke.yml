@@ -1,6 +1,15 @@
 name: Verify published npm package
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to verify (empty uses the workflow ref)
+        type: string
+        default: ''
+      allow_initial_latest:
+        description: Accept the registry latest tag on the first npm publication only
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -17,5 +26,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: python scripts/check-release.py --tag "${{ github.ref_name }}"
-      - run: python scripts/smoke-install.py --mode registry
+      - name: Verify registry installation
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          ALLOW_INITIAL_LATEST: ${{ inputs.allow_initial_latest }}
+        run: |
+          args=()
+          if [ "$ALLOW_INITIAL_LATEST" = true ]; then
+            args+=(--allow-initial-latest)
+          fi
+          python scripts/smoke-install.py --mode registry --tag "$RELEASE_TAG" "${args[@]}"

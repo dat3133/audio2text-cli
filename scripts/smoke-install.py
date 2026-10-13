@@ -9,13 +9,15 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
-from release_common import BINARIES, REPOSITORY, ROOT, expected_assets, npm_command, read_sums, run, sha256, validate_version, verify_release
+from release_common import BINARIES, REPOSITORY, ROOT, expected_assets, npm_command, read_sums, run, sha256, validate_version, verify_npm_tags, verify_release
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode", choices=("local", "online", "registry"), required=True)
 parser.add_argument("--directory")
+parser.add_argument("--tag",help="Verify that the target release tag matches the source version")
+parser.add_argument("--allow-initial-latest",action="store_true",help="Accept the registry's latest tag on the first publication only")
 args = parser.parse_args()
-value = validate_version()
+value = validate_version(args.tag)
 base = ROOT / ".test-data"
 base.mkdir(exist_ok=True)
 work = Path(tempfile.mkdtemp(prefix="install 中文 空格-", dir=base))
@@ -40,14 +42,19 @@ def check(binary):
 if args.mode == "registry":
     raw = run(npm_command("view",f"audio2text-cli@{value}","--json","--loglevel=error"),capture_output=True,text=True,encoding="utf-8")
     metadata = json.loads(raw.stdout)
-    if metadata["dist-tags"].get("beta") != value or metadata["dist-tags"].get("latest") == value:
-        raise ValueError("Unexpected npm beta/latest tags")
+    if verify_npm_tags(metadata,value,args.allow_initial_latest):
+        print("Accepted first-publication registry exception: latest also points to this beta.")
     archive = work/f"audio2text-cli-{value}.tgz"
     with urllib.request.urlopen(metadata["dist"]["tarball"],timeout=120) as response:
         archive.write_bytes(response.read(2*1024*1024))
     integrity = "sha512-" + base64.b64encode(hashlib.sha512(archive.read_bytes()).digest()).decode()
     if integrity != metadata["dist"]["integrity"]:
         raise ValueError("Registry tarball integrity mismatch")
+    manifest = work/"SHA256SUMS"
+    with urllib.request.urlopen(f"https://github.com/{REPOSITORY}/releases/download/v{value}/SHA256SUMS",timeout=120) as response:
+        manifest.write_bytes(response.read(4096))
+    if sha256(archive) != read_sums(manifest).get(archive.name):
+        raise ValueError("Registry tarball differs from the verified GitHub Release")
 else:
     directory = Path(args.directory).resolve() if args.directory else work/"release"
     if args.mode == "online":

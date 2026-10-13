@@ -46,6 +46,20 @@ def npm_command(*args):
         raise ValueError("Cannot locate npm CLI")
     return [shutil.which("node") or "node", str(cli), *map(str, args), "--registry=https://registry.npmjs.org"]
 
+def verify_npm_tags(metadata, value, allow_initial_latest=False):
+    tags = metadata["dist-tags"]
+    if tags.get("beta") != value:
+        raise ValueError("npm beta tag differs from the verified version")
+    if tags.get("latest") != value:
+        return False
+    if not allow_initial_latest:
+        raise ValueError("Preview is also tagged latest; the first-publication registry exception requires explicit --allow-initial-latest")
+    # npm may retain its staging placeholder for a newly created package.
+    versions = set(metadata.get("versions", []))
+    if value not in versions or versions - {value, "0.0.0-stage"}:
+        raise ValueError("The latest exception only applies to the first released npm version")
+    return True
+
 def run(args, **kwargs):
     return subprocess.run(list(map(str,args)), check=True, cwd=ROOT, **kwargs)
 

@@ -189,6 +189,8 @@ audio2text --version
 audio2text init
 ```
 
+首个 npm 版本发布后，注册表自动让 `beta` 和 `latest` 都指向 `0.1.0-beta.2`，删除 `latest` 的请求返回 HTTP 400；npm 官方仓库中也有[相同首发行为的报告](https://github.com/npm/cli/issues/8490)。本项目当前仅为预览版，安装请显式使用 `@beta` 或 `@0.1.0-beta.2`。后续预览发布继续指定 `beta`，不主动更新 `latest`。
+
 npm 包仅包含入口、固定版本与校验信息、文档和许可证，安装时从 GitHub Release 获取匹配的平台程序；postinstall 不运行 init。禁用安装脚本时，首次执行命令也会准备程序。每次复用检查 SHA256，已有正常程序可离线使用；初次安装或缓存损坏需要连接 GitHub。下载进度在 stderr，失败返回稳定错误。临时下载文件保留供检查。
 
 ## 发布维护
@@ -199,7 +201,13 @@ npm 包仅包含入口、固定版本与校验信息、文档和许可证，安�
 gh workflow run release.yml --ref v0.1.0-beta.2 -f publish_npm=false
 ```
 
-工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，npm 账号启用双重验证后，通过浏览器完成 `npm login --registry=https://registry.npmjs.org`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball；发布操作可能需要再次完成浏览器验证。发布工具固定使用官方注册表，不修改本机镜像设置。再运行 `gh workflow run npm-smoke.yml --ref v0.1.0-beta.2` 验证两平台从 npm 注册表安装。
+工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，npm 账号启用双重验证后，通过浏览器完成 `npm login --registry=https://registry.npmjs.org`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball；发布操作可能需要再次完成浏览器验证。发布工具固定使用官方注册表，不修改本机镜像设置。再运行 `npm-smoke.yml` 验证两平台从 npm 注册表安装；本次首发例外的执行方式见下。
+
+发布工具等待注册表完成处理，重试时核对已发布版本的完整性，不重复上传。仅核验现有产物使用 `--verify-only`。本次已接受首发的自动 `latest` 标签例外，使用 `python scripts/publish-npm.py --verify-only --allow-initial-latest` 核验；该选项只允许注册表中有一个实际发布版本。保持已发布标签和附件不变，从维护分支运行更新后的检查：
+
+```powershell
+gh workflow run npm-smoke.yml --ref main -f release_tag=v0.1.0-beta.2 -f allow_initial_latest=true
+```
 
 首发后配置可信发布：
 
@@ -207,7 +215,7 @@ gh workflow run release.yml --ref v0.1.0-beta.2 -f publish_npm=false
 npm trust github audio2text-cli --file release.yml --repo dat3133/audio2text-cli --allow-publish --registry=https://registry.npmjs.org
 ```
 
-后续版本在 `release.yml` 开启 `publish_npm`，使用 Node 24 和 npm OIDC 发布；公开仓库的可信发布会自动生成来源证明。预览版始终使用 npm `beta` 标签，不切换 `latest`。同版本已公开内容不覆盖，内容不同需发布新版本。
+后续版本在 `release.yml` 开启 `publish_npm`，使用 Node 24 和 npm OIDC 发布；公开仓库的可信发布会自动生成来源证明。预览版发布命令始终指定 npm `beta` 标签，不主动切换 `latest`；首发例外如上所述。同版本已公开内容不覆盖，内容不同需发布新版本。
 
 ## 开发验证
 

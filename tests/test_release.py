@@ -9,9 +9,37 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
-from release_common import BINARIES, NPM_FILES, npm_command, read_sums, validate_version, verify_release, version
+from release_common import BINARIES, NPM_FILES, npm_command, read_sums, validate_version, verify_npm_tags, verify_release, version
 
 class ReleaseTests(unittest.TestCase):
+    def test_latest_exception_is_explicit_and_first_publication_only(self):
+        preview=version()
+        metadata={"dist-tags":{"beta":preview},"versions":["0.0.0-stage",preview]}
+        self.assertFalse(verify_npm_tags(metadata,preview))
+        metadata['dist-tags']['latest']=preview
+        with self.assertRaises(ValueError):
+            verify_npm_tags(metadata,preview)
+        self.assertTrue(verify_npm_tags(metadata,preview,allow_initial_latest=True))
+        metadata['versions'].append('0.0.1-beta.1')
+        with self.assertRaises(ValueError):
+            verify_npm_tags(metadata,preview,allow_initial_latest=True)
+        metadata['dist-tags']['beta']='0.0.1-beta.1'
+        with self.assertRaises(ValueError):
+            verify_npm_tags(metadata,preview,allow_initial_latest=True)
+
+    def test_registry_visibility_wait_does_not_repeat_publication(self):
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('publish_npm',ROOT/'scripts/publish-npm.py')
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        responses=iter([subprocess.CompletedProcess([],1,'','E404'),subprocess.CompletedProcess([],0,'{"dist-tags":{"beta":"preview"}}','')])
+        pauses=[]
+        result=module.wait_for_version(lambda:next(responses),attempts=2,sleep=pauses.append)
+        self.assertEqual(result['dist-tags']['beta'],'preview')
+        self.assertEqual(pauses,[15])
+        with self.assertRaises(RuntimeError):
+            module.wait_for_version(lambda:subprocess.CompletedProcess([],1,'','E404'),attempts=1,sleep=pauses.append)
+
     def test_release_tools_target_official_registry(self):
         self.assertEqual(npm_command('publish','fixture.tgz')[-1],'--registry=https://registry.npmjs.org')
 
