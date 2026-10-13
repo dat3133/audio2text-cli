@@ -1,13 +1,21 @@
 #!/usr/bin/env node
 import {spawn} from 'node:child_process';
-import {ensureBinary} from '../lib.mjs';
+import {ensureBinary, errorResult, CliError} from '../lib.mjs';
+const controller = new AbortController();
+let child, reported = false;
+const command = process.argv.slice(2).find(value => ['init','doctor','models','transcribe'].includes(value)) || 'cli';
+function report(error) {
+  if (reported) return;
+  reported = true;
+  console.log(JSON.stringify(errorResult(error,command)));
+  process.exitCode = error.exit || 3;
+}
+for (const signal of ['SIGINT','SIGTERM']) process.on(signal,() => {if (child) child.kill(signal); else controller.abort();});
 try {
-  const binary = await ensureBinary();
-  const child = spawn(binary, process.argv.slice(2), {stdio: 'inherit', windowsHide: true});
-  child.on('error', error => {console.error(error.message); process.exitCode = 1;});
-  child.on('exit', (code, signal) => {process.exitCode = signal === 'SIGINT' ? 130 : (code ?? 1);});
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
+  const binary = await ensureBinary({signal:controller.signal});
+  child = spawn(binary,process.argv.slice(2),{stdio:'inherit',windowsHide:true});
+  child.on('error',error => report(new CliError('ENV_NOT_READY',error.message,3,false,'Check executable permissions or reinstall the CLI.')));
+  child.on('exit',(code,signal) => {if (!reported) process.exitCode = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : (code ?? 1);});
 } catch (error) {
-  console.log(JSON.stringify({schema_version:'1',command:'cli',status:'error',data:{},warnings:[],error:{code:'ENV_NOT_READY',message:error.message,retryable:false,hint:'Reinstall the CLI package.'}}));
-  process.exitCode = 3;
+  report(error);
 }

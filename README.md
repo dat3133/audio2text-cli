@@ -2,11 +2,11 @@
 
 本地语音转文字 CLI：多步初始化向导、硬件感知的模型推荐，以及 agent 可直接解析的 JSON。
 
-项目目前为 **0.1.0 开发版本**，源码维护于 [dat3133/audio2text-cli](https://github.com/dat3133/audio2text-cli)。本项目尚未发布 GitHub Release 或 npm 包，当前请通过源码构建使用。下文的发布安装方式需要对应版本的发布产物。
+项目目前为 **0.1.0-beta.1 预览版本**，源码维护于 [dat3133/audio2text-cli](https://github.com/dat3133/audio2text-cli)。发布入口为 [GitHub 预发布](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.1) 和 [npm beta 渠道](https://www.npmjs.com/package/audio2text-cli)。以下发布安装命令对应同版本产物；源码构建方式也可使用。
 
 ## 当前状态与限制
 
-- 目标平台为 Windows、Linux x86_64。Windows 已完成本地构建、安装和真实转写检查；Linux 的原生安装、完整推理和硬件验收仍需补齐。
+- 目标平台为 Windows、Linux x86_64，两平台构建和离线接口测试已有 CI 验证。Windows 已完成本地真实转写检查；Linux 完整推理和硬件验收仍需补齐。Linux 发布程序在 Ubuntu 22.04 上验证，使用 glibc，不提供 Alpine/musl 包。
 - Windows 上已验证 Qwen3-ASR 0.6B CPU、1.7B CUDA，以及 Whisper tiny CPU/CUDA 调用。部分 CUDA 检查复用已有依赖，默认托管 CUDA 环境和全部模型规格仍需验证。
 - 模型推荐目前采用启发式排序，资源指标为保守估计；自然录音的 CER/WER 和可比较的质量、速度基准尚未建立。
 - 中英混合识别存在差异。当前合成样例中，Qwen3-ASR 1.7B 自动识别出现开头遗漏和局部语言转换。返回 `ok` 表示流程成功，不保证正文准确。
@@ -163,23 +163,51 @@ agent 根据退出码和错误代码决定下一步。转写不会隐式下载�
 
 安装器下载同版本原生程序并验证发布清单。Windows 安装器更新用户 PATH；Linux 安装器默认放入 `~/.local/bin`，缺少 PATH 时显示说明。安装脚本在控制终端可用时自动运行向导；npm 仅提示 init。
 
-安装器默认使用 `dat3133/audio2text-cli`。对应版本的 GitHub Release 发布后，可在源码目录执行：
+安装器默认使用 `dat3133/audio2text-cli`。Windows PowerShell 下载并运行版本固定的安装脚本：
 
 ```powershell
-.\install.ps1 -Version 0.1.0
-.\install.ps1 -Version 0.1.0 -NoInit
+$installer = Join-Path $PWD 'audio2text-install.ps1'
+Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.1/install.ps1' -OutFile $installer
+& $installer
+# 自动化跳过向导：& $installer -NoInit
 ```
 
-Linux 源码目录中执行 `sh install.sh --version 0.1.0`，自动化可追加 `--no-init`。两个安装器都允许显式覆盖仓库；Windows 使用 `-Repository`，Linux 使用 `--repository`。Linux 另支持 `--install-dir`。安装器只下载 CLI，不在跳过向导时准备模型。
+Linux 安装：
 
-本地 npm 包可包含已构建的程序：
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.1/install.sh | sh
+# 自动化使用：... | sh -s -- --no-init
+```
+
+两个安装器都允许覆盖仓库、版本和安装目录；Windows 使用 `-Repository`、`-Version`、`-InstallDir`，Linux 使用 `--repository`、`--version`、`--install-dir`。本地产物检查另支持 `-ArtifactPath`/`-ChecksumPath` 和 `--artifact-path`/`--checksum-path`。安装器只下载 CLI，不在跳过向导时准备模型。
+
+npm 安装预览版：
 
 ```powershell
-node scripts/prepare-npm.mjs --binary target/release/audio2text.exe
-npm pack ./npm
+npm install -g audio2text-cli@beta
+audio2text --version
+audio2text init
 ```
 
-公开 npm 发布使用 `node scripts/prepare-npm.mjs --repository dat3133/audio2text-cli` 写入发布元数据，安装后从 GitHub Releases 下载同版本程序；不在 postinstall 中运行 init。未指定仓库时，准备脚本优先使用 `GITHUB_REPOSITORY`，否则使用项目默认仓库。包名占用和账号权限须发布前确认。
+npm 包仅包含入口、固定版本与校验信息、文档和许可证，安装时从 GitHub Release 获取匹配的平台程序；postinstall 不运行 init。禁用安装脚本时，首次执行命令也会准备程序。每次复用检查 SHA256，已有正常程序可离线使用；初次安装或缓存损坏需要连接 GitHub。下载进度在 stderr，失败返回稳定错误。临时下载文件保留供检查。
+
+## 发布维护
+
+同步 Cargo、锁文件、npm 和安装器默认版本后提交，创建并推送对应的 `v<version>` 标签。发布工作流必须运行在标签上，先通过两平台测试、构建和本地安装检查，再生成全量校验清单及平台无关 npm tarball。
+
+```powershell
+gh workflow run release.yml --ref v0.1.0-beta.1 -f publish_npm=false
+```
+
+工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，通过浏览器完成 `npm login`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball。再运行 `gh workflow run npm-smoke.yml --ref v0.1.0-beta.1` 验证两平台从 npm 注册表安装。
+
+首发后配置可信发布：
+
+```powershell
+npm trust github audio2text-cli --file release.yml --repo dat3133/audio2text-cli --allow-publish
+```
+
+后续版本在 `release.yml` 开启 `publish_npm`，使用 Node 24 和 npm OIDC 发布；公开仓库的可信发布会自动生成来源证明。预览版始终使用 npm `beta` 标签，不切换 `latest`。同版本已公开内容不覆盖，内容不同需发布新版本。
 
 ## 开发验证
 
@@ -194,4 +222,4 @@ Python worker 测试需要 NumPy 和 imageio-ffmpeg；真实模型测试另外�
 
 ## 许可与来源
 
-项目代码 Apache-2.0；原始设计来自 qwen3-asr-transcribe 技能。模型和后端保留各自许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。程序使用后端公开转写接口，不依赖 `_infer_asr`。
+项目代码 Apache-2.0；原始设计来自 qwen3-asr-transcribe 技能。模型和后端保留各自许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。发布附件和 npm 包另包含固定 Cargo 依赖的原始许可证声明。程序使用后端公开转写接口，不依赖 `_infer_asr`。

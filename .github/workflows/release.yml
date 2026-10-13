@@ -1,10 +1,27 @@
-name: Build release candidates
+name: Publish preview release
 on:
   workflow_dispatch:
+    inputs:
+      publish_npm:
+        description: Publish npm through the configured trusted publisher
+        type: boolean
+        default: false
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/check-release.py --tag "${{ github.ref_name }}"
   build:
+    needs: validate
     strategy:
       matrix:
         include:
@@ -18,31 +35,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --locked
-      - run: cargo build --release --locked
+        with:
+          components: clippy
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: cargo test --locked
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo build --release --locked
+      - run: python -m pip install numpy==2.2.6 imageio-ffmpeg==0.6.0
+      - run: python -m unittest discover -s tests -v
+        env:
+          AUDIO2TEXT_BIN: ${{ matrix.source }}
+      - run: node --test npm/test.mjs
       - name: Prepare candidate artifact
         run: python scripts/package-release.py "${{ matrix.source }}" "${{ matrix.asset }}"
+      - run: python scripts/smoke-install.py --mode local --directory dist/platform
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
-          path: dist/*
-  npm:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: node --test npm/test.mjs
-      - run: node scripts/prepare-npm.mjs --repository "${{ github.repository }}"
-      - run: npm pack ./npm
-      - uses: actions/upload-artifact@v4
-        with:
-          name: npm-candidate
-          path: '*.tgz'
+          path: dist/platform/*
   assemble:
     needs: build
     runs-on: ubuntu-22.04
@@ -51,12 +66,85 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - uses: actions/download-artifact@v4
         with:
           pattern: audio2text-*
           path: .release-parts
       - run: python scripts/assemble-release.py .release-parts
+      - run: python scripts/check-release.py --tag "${{ github.ref_name }}" --directory dist/release
       - uses: actions/upload-artifact@v4
         with:
           name: release-candidate
-          path: dist/*
+          path: dist/release/*
+  publish_github:
+    needs: assemble
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate
+          path: dist/release
+      - run: python scripts/publish-github.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+  verify_online:
+    needs: publish_github
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python scripts/smoke-install.py --mode online
+  publish_npm:
+    needs: verify_online
+    if: inputs.publish_npm
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate
+          path: dist/release
+      - run: python scripts/publish-npm.py
+  verify_registry:
+    needs: publish_npm
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python scripts/smoke-install.py --mode registry

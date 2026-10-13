@@ -1,6 +1,6 @@
 [package]
 name = "audio2text"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 edition = "2024"
 description = "Local speech-to-text CLI with guided setup and agent-friendly JSON"
 license = "Apache-2.0"
