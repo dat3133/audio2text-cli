@@ -1,0 +1,14 @@
+/target/
+/PROJECT_REQUIREMENTS.md
+/VALIDATION.md
+/.test-data/
+/dist/
+/.release-parts/
+/npm/native/
+/npm/release.json
+/npm/README.md
+/npm/LICENSE
+__pycache__/
+*.pyc
+*.tgz
+.venv/

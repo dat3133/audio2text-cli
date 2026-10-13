@@ -1,0 +1,62 @@
+name: Build release candidates
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            source: target/release/audio2text.exe
+            asset: audio2text-windows-x86_64.exe
+          - os: ubuntu-22.04
+            source: target/release/audio2text
+            asset: audio2text-linux-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare candidate artifact
+        run: python scripts/package-release.py "${{ matrix.source }}" "${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*
+  npm:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test npm/test.mjs
+      - run: node scripts/prepare-npm.mjs --repository "${{ github.repository }}"
+      - run: npm pack ./npm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-candidate
+          path: '*.tgz'
+  assemble:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: audio2text-*
+          path: .release-parts
+      - run: python scripts/assemble-release.py .release-parts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate
+          path: dist/*

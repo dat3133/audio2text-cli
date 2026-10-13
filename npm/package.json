@@ -1,0 +1,16 @@
+{
+  "name": "audio2text-cli",
+  "version": "0.1.0",
+  "description": "Local speech-to-text CLI with guided setup and agent-friendly JSON",
+  "license": "Apache-2.0",
+  "repository": {"type": "git", "url": "git+https://github.com/dat3133/audio2text-cli.git"},
+  "homepage": "https://github.com/dat3133/audio2text-cli#readme",
+  "bugs": {"url": "https://github.com/dat3133/audio2text-cli/issues"},
+  "type": "module",
+  "bin": {"audio2text": "bin/audio2text.mjs"},
+  "files": ["bin", "install.mjs", "lib.mjs", "release.json", "native", "README.md", "LICENSE"],
+  "scripts": {"postinstall": "node install.mjs", "test": "node --test test.mjs"},
+  "engines": {"node": ">=18"},
+  "os": ["win32", "linux"],
+  "cpu": ["x64"]
+}
