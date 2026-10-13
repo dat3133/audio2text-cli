@@ -1,99 +1,116 @@
 # audio2text
 
-本地语音转文字 CLI：多步初始化向导、硬件感知的模型推荐，以及 agent 可直接解析的 JSON。
+本地语音转文字 CLI，支持音视频文件、批量转写和多步模型配置。可直接在终端使用，也可由 Claude Code、Codex 等 agent 调用；转写离线进行，不上传音频或正文。
 
-项目目前为 **0.1.0-beta.2 预览版本**，源码维护于 [dat3133/audio2text-cli](https://github.com/dat3133/audio2text-cli)。发布入口为 [GitHub 预发布](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.2) 和 [npm beta 渠道](https://www.npmjs.com/package/audio2text-cli)。以下发布安装命令对应同版本产物；源码构建方式也可使用。
+当前为 **0.1.0-beta.2 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.2)
 
-## 当前状态与限制
+## 快速开始
 
-- 目标平台为 Windows、Linux x86_64，两平台构建和离线接口测试已有 CI 验证。Windows 已完成本地真实转写检查；Linux 完整推理和硬件验收仍需补齐。Linux 发布程序在 Ubuntu 22.04 上验证，使用 glibc，不提供 Alpine/musl 包。
-- Windows 上已验证 Qwen3-ASR 0.6B CPU、1.7B CUDA，以及 Whisper tiny CPU/CUDA 调用。部分 CUDA 检查复用已有依赖，默认托管 CUDA 环境和全部模型规格仍需验证。
-- 模型推荐目前采用启发式排序，资源指标为保守估计；自然录音的 CER/WER 和可比较的质量、速度基准尚未建立。
-- 中英混合识别存在差异。当前合成样例中，Qwen3-ASR 1.7B 自动识别出现开头遗漏和局部语言转换。返回 `ok` 表示流程成功，不保证正文准确。
-- 两小时合成语音已通过连续处理检查，用于验证时长覆盖和内存行为；该结果不代表自然录音质量，也不作为跨机器性能承诺。
-
-实时录音、流式识别、字幕、词级时间戳、说话人分离、云端 ASR、MCP 和常驻推理服务暂未提供。
-
-## 从源码运行
-
-需要 Rust 开发工具链；普通用户使用发布的原生可执行程序，无需 Rust、Python、Conda 或 FFmpeg。
+npm 安装需要 **Node.js 18+ 和 npm**，无需预装 Python、Conda 或 FFmpeg。在终端执行：
 
 ```powershell
-cargo build --release --locked
-.\target\release\audio2text.exe --help
-.\target\release\audio2text.exe doctor
-.\target\release\audio2text.exe init
+npm install -g audio2text-cli@beta
+audio2text init
+audio2text transcribe "meeting.m4a" --language zh --format text
 ```
 
-Linux 源码构建入口为 `./target/release/audio2text`。首版只支持 Windows/Linux x86_64。
+安装只准备 CLI；首次 `init` 会引导选择模型，下载模型及运行环境。完成初始化后即可离线转写。初始化需要联网，npm 安装还需要连接 GitHub 下载平台程序。
 
-## 初始化向导
-
-`audio2text init` 在交互终端中依次展示环境、推荐/高级模式、语言、偏好、模型、下载源和准备计划。推荐模型会预选，仍可更换；高级模式允许修改设备、数据目录、批大小和分段长度。方向键/Enter 操作，选择返回项可修改前一步，Ctrl+C 取消。
-
-`TERM=dumb` 或 `AUDIO2TEXT_PLAIN=1` 使用数字选择界面。交互提示写入 stderr，stdout 只有最终结果。
+当前仍为预览版，请明确安装 `@beta` 或固定版本；首发的 `latest` 标签也指向预览版。
 
 ```powershell
+audio2text --version
+# 固定到当前版本
+npm install -g audio2text-cli@0.1.0-beta.2
+# npm 镜像未同步时，临时使用官方注册表
+npm install -g audio2text-cli@beta --registry=https://registry.npmjs.org
+```
+
+## 其他安装方式
+
+无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.2) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
+
+<details>
+<summary>Windows / Linux 安装脚本</summary>
+
+Windows PowerShell：
+
+```powershell
+$installer = Join-Path $PWD 'audio2text-install.ps1'
+Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.ps1' -OutFile $installer
+& $installer
+# 跳过初始化向导：& $installer -NoInit
+```
+
+Linux：
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.sh | sh
+# 跳过初始化向导：在上面的管道末尾使用 sh -s -- --no-init
+```
+
+脚本验证下载校验值，并在有交互终端时自动进入向导。Windows 安装后请重开终端，使 PATH 更新生效；Linux 默认安装到 `~/.local/bin`，请确保该目录在 PATH 中。npm 安装不会打开向导，需手动执行 `audio2text init`。
+
+</details>
+
+## 初始化与模型
+
+`audio2text init` 依次检测环境，并让你选择语言、均衡/准确率/速度偏好、模型及下载源。推荐模型会预选，仍可更换；高级配置可设置设备、数据目录、批大小和分段长度。方向键选择、Enter 确认，可返回上一步，Ctrl+C 取消。
+
+```powershell
+# 仅查看计划，不下载、不修改配置
 audio2text init --dry-run --profile balanced --language zh
-audio2text init --non-interactive --profile balanced --language zh
+# 使用 CPU，适合无 NVIDIA GPU 的电脑
 audio2text init --non-interactive --model whisper/tiny --device cpu
+# 自定义模型、运行环境和配置的存储目录
+audio2text --data-dir "./audio2text-data" init
 ```
 
-初始化下载固定版本的 uv，校验官方 SHA256，再准备隔离 Python 3.12.12、对应后端和内置 FFmpeg。CPU/CUDA 运行时分开管理。CUDA 运行配置使用 cu126，要求可用 NVIDIA GPU 和兼容驱动；自动模式可推荐 CPU。自检成功后才写入默认模型。
+使用自定义目录时，后续命令继续传入相同的 `--data-dir`，或设置 `AUDIO2TEXT_HOME`。默认目录为 Windows 的 `%LOCALAPPDATA%\audio2text`，Linux 的 `$XDG_DATA_HOME/audio2text` 或 `~/.local/share/audio2text`。CUDA 需要 NVIDIA GPU 和兼容驱动；工具不安装 GPU 驱动。
 
-托管环境使用随程序嵌入的已测试依赖版本约束；运行时记录实际依赖版本。Python 路径、全局用户包和其他工具的 PYTHONPATH 不会污染托管推理进程。
-
-`--data-dir` 优先于 `AUDIO2TEXT_HOME`，否则 Windows 使用 `%LOCALAPPDATA%\audio2text`，Linux 使用 `$XDG_DATA_HOME/audio2text` 或 `~/.local/share/audio2text`。CLI 不修改已有 Python 环境或安装 GPU 驱动。
-
-Qwen 后端延迟加载仅用于时间对齐的 nagisa，避免其原生字典加载器的 Windows 中文路径问题。纯 ASR 包括日语识别仍使用公开转写接口；首版不启用时间对齐，不修改已安装的第三方包。
-
-## 模型
+| 后端 | 可用模型 ID |
+|---|---|
+| Qwen3-ASR | `qwen3-asr/0.6b`、`qwen3-asr/1.7b` |
+| faster-whisper | `whisper/tiny`、`whisper/base`、`whisper/small`、`whisper/medium`、`whisper/large-v3`、`whisper/turbo` |
 
 ```powershell
 audio2text models list --language zh
 audio2text models recommend --profile speed --device cpu
 audio2text models install whisper/base --device cpu
-audio2text models use whisper/base
-audio2text models import "D:\models\Qwen3-ASR-1.7B" --id qwen3-asr/1.7b
+audio2text models use whisper/base --device cpu
 ```
 
-`models use` 默认选择已经准备好的可用设备，也支持 `--device cpu` 等显式选择。显式指定设备不可用时会失败。
+`models install` 准备模型及对应运行环境，`models use` 切换已安装的默认模型。下载源可选择自动或 Hugging Face，Qwen 模型另支持 ModelScope；重复初始化会复用已校验的资源。
 
-目录包含 Qwen3-ASR 0.6B/1.7B，以及 Whisper tiny/base/small/medium/large-v3/turbo。模型固定到具体仓库修订，文件按 SHA256 或 Git blob SHA1 验证。导入目录也必须匹配该版本，不能将任意模型目录注册为同一 ID。
+## 常用转写
 
-只有 Qwen 模型提供 ModelScope 镜像。镜像文件仍须通过固定清单校验，内容改变会失败。`auto` 依次检测可用来源，转写期间不访问任何来源。
-
-推荐和资源指标当前明确标为 **保守估计/启发式排序**，不代表已经建立跨模型精度或速度基线。实际排名需要发布前基准测试；不要把可安装理解为保证快速运行。
-
-已有推理环境可显式复用，无需修改该环境：
+支持 WAV、MP3、M4A、FLAC、MP4、MKV 等常见格式；视频默认使用第一条音轨，长录音自动分段合并。路径包含空格或中文时使用引号。
 
 ```powershell
-audio2text init --non-interactive --model qwen3-asr/1.7b --local-model "D:\models\Qwen3-ASR-1.7B" --runtime-python "D:\envs\asr\python.exe" --device cuda:0
-```
-
-复用是可选高级功能；缺失依赖时失败，不向外部环境安装包。普通初始化自动准备托管环境。
-
-## 转写
-
-```powershell
+# 单文件，默认返回 JSON；不指定语言时使用初始化设置
 audio2text transcribe "meeting.m4a" --language zh
-audio2text transcribe "meeting.m4a" --output "meeting.txt" --no-text
-audio2text transcribe "a.wav" "b.mp4" --output-dir "transcripts"
+# 只在终端显示正文
 audio2text transcribe "meeting.m4a" --format text
-audio2text transcribe "meeting.m4a" --context-file "terms.txt" --batch-size 2
+# 保存 TXT，JSON 中仅返回文件位置等信息
+audio2text transcribe "meeting.m4a" --output "meeting.txt" --no-text
+# 批量转写到目录
+audio2text transcribe "a.wav" "b.mp4" --output-dir "transcripts"
+# 提供 UTF-8 背景文本或术语文件
+audio2text transcribe "meeting.m4a" --context-file "terms.txt"
 ```
 
-默认 stdout 返回 JSON，进度在 stderr。视频选择第一条音轨；长音频增量解码，并在低能量附近切分，默认目标 60 秒。批量复用模型，返回顺序与输入一致。每个文件的语言可能包含多个代码。
+`--format text` 仅用于单文件；批量使用 JSON。输出文件为 UTF-8 TXT，默认不覆盖已有文件，确认需要覆盖时添加 `--overwrite`。`--output` 用于单文件，`--output-dir` 用于批量；`--no-text` 必须搭配文件输出，此时 JSON 正文为 `null`，`output` 为实际输出文件的绝对路径。
 
-`--output` 只用于单文件；批量使用 `--output-dir`。不同目录下同名文件造成输出冲突时，推理前失败。已有结果默认不覆盖，使用 `--overwrite` 才允许；始终禁止把输出设置为输入文件。输出为 UTF-8 TXT，原子提交。
+## agent 使用
 
-Windows 使用不覆盖目标的原子移动；Linux 非覆盖写入的 staging 链接移到输出目录下 `.audio2text-recovery/`，共享相同文件内容。失败的 staging 文件保留供恢复，工具不自动清理旧模型或恢复记录。
+自动化调用应显式使用 `--non-interactive`，转写不会自动下载模型或打开向导：
 
-转写强制离线；除了后端离线参数，还阻止 Python 网络连接，FFmpeg 仅允许 file/pipe 协议。没有模型或运行时直接报错，不隐式初始化。
+```powershell
+audio2text init --non-interactive --profile balanced --language zh
+audio2text transcribe "meeting.m4a" --format json
+```
 
-推理代码从原生程序通过 stdin 传入解释器，转写不改写运行时或模型缓存目录。agent 可使用已经初始化的只读模型环境，并将文本输出到其可写工作区。
-
-## agent 接口
+stdout 返回一个 JSON 对象，进度与日志在 stderr。成功结果示例：
 
 ```json
 {
@@ -101,133 +118,40 @@ Windows 使用不覆盖目标的原子移动；Linux 非覆盖写入的 staging 
   "command": "transcribe",
   "status": "ok",
   "data": {
-    "results": [
-      {
-        "input": "/absolute/file.wav",
-        "status": "ok",
-        "model": "whisper/tiny",
-        "backend": "faster-whisper",
-        "device": "cpu",
-        "languages": ["en"],
-        "audio_duration_seconds": 10.0,
-        "text": "Example text",
-        "output": null,
-        "warnings": [],
-        "error": null
-      }
-    ]
+    "results": [{
+      "input": "/absolute/file.wav",
+      "status": "ok",
+      "model": "whisper/tiny",
+      "backend": "faster-whisper",
+      "device": "cpu",
+      "languages": ["en"],
+      "audio_duration_seconds": 10.0,
+      "text": "Example text",
+      "output": null,
+      "warnings": [],
+      "error": null
+    }]
   },
   "warnings": [],
   "error": null
 }
 ```
 
-顶层状态为 `ok`、`partial`、`error`；批量结果保留输入顺序，各文件有独立状态。错误包含稳定的 `code`、可读的 `message`、`retryable` 和处理建议 `hint`。`--no-text` 必须搭配文件输出，此时正文为 `null`，`output` 返回实际输出文件的绝对路径。
+顶层状态为 `ok`、`partial` 或 `error`，批量结果保持输入顺序。退出码 `0` 表示成功，`8` 表示部分成功；失败时读取顶层或各文件的 `error.code`、`message`、`retryable` 和 `hint`。完整接入流程见 [agent SKILL.md](skills/audio2text/SKILL.md)，错误示例与退出码表见 [贡献指南](CONTRIBUTING.md#cli-interface-reference)。
 
-未初始化时的错误结构示例：
+## 常见问题与限制
 
-```json
-{
-  "schema_version": "1",
-  "command": "transcribe",
-  "status": "error",
-  "data": null,
-  "warnings": [],
-  "error": {
-    "code": "ENV_NOT_READY",
-    "message": "运行环境尚未准备完成",
-    "retryable": false,
-    "hint": "运行 audio2text init --non-interactive --profile balanced。"
-  }
-}
-```
-
-agent 根据退出码和错误代码决定下一步。转写不会隐式下载或打开向导；初始化应显式使用 `--non-interactive`。单文件可用 `--format text` 输出正文，多文件使用 JSON。
-
-| 退出码 | 含义 |
+| 问题 | 处理方式 |
 |---|---|
-| 0 | 成功 |
-| 1 | 内部错误 |
-| 2 | 参数/配置/交互终端要求 |
-| 3 | 环境或模型未就绪 |
-| 4 | 输入或解码错误 |
-| 5 | 推理/OOM |
-| 6 | 准备或下载失败 |
-| 7 | 写入或输出冲突 |
-| 8 | 批量部分成功 |
-| 130 | 取消 |
+| 找不到 `audio2text` 命令 | 重开终端，确认 npm 全局命令目录或脚本安装目录已加入 PATH。 |
+| npm 找不到 beta 版本 | 使用快速开始中的官方注册表安装命令。 |
+| 模型或环境未就绪 | 运行 `audio2text doctor`，再执行 `audio2text init`；转写不会自动初始化。 |
+| 显存或内存不足 | 减小 `--batch-size` 或 `--segment-seconds`；需要更小模型或 CPU 环境时，通过 `init` 明确重新选择。 |
 
-接入 agent 的通用指引见 [skills/audio2text/SKILL.md](skills/audio2text/SKILL.md)。
+当前支持 Windows/Linux x86_64，Linux 程序使用 glibc，暂不支持 macOS、ARM 或 Alpine/musl。两平台安装已有验证，Linux 完整推理、默认托管 CUDA 环境及全部模型规格仍待补齐。推荐排序和资源估计仅供选型参考，尚无自然录音准确率基准；混合语言结果需复核，返回 `ok` 表示流程成功，不保证正文准确。
 
-## 安装与发布
+暂不提供实时录音、流式识别、字幕、词级时间戳、说话人分离、云端 ASR、MCP 或常驻推理服务。更多参数可通过 `audio2text --help`、`audio2text init --help` 和 `audio2text transcribe --help` 查看；问题反馈请使用 [GitHub Issues](https://github.com/dat3133/audio2text-cli/issues)。
 
-安装器下载同版本原生程序并验证发布清单。Windows 安装器更新用户 PATH；Linux 安装器默认放入 `~/.local/bin`，缺少 PATH 时显示说明。安装脚本在控制终端可用时自动运行向导；npm 仅提示 init。
+## 许可证及贡献
 
-安装器默认使用 `dat3133/audio2text-cli`。Windows PowerShell 下载并运行版本固定的安装脚本：
-
-```powershell
-$installer = Join-Path $PWD 'audio2text-install.ps1'
-Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.ps1' -OutFile $installer
-& $installer
-# 自动化跳过向导：& $installer -NoInit
-```
-
-Linux 安装：
-
-```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.sh | sh
-# 自动化使用：... | sh -s -- --no-init
-```
-
-两个安装器都允许覆盖仓库、版本和安装目录；Windows 使用 `-Repository`、`-Version`、`-InstallDir`，Linux 使用 `--repository`、`--version`、`--install-dir`。本地产物检查另支持 `-ArtifactPath`/`-ChecksumPath` 和 `--artifact-path`/`--checksum-path`。安装器只下载 CLI，不在跳过向导时准备模型。
-
-npm 安装预览版：
-
-```powershell
-npm install -g audio2text-cli@beta
-audio2text --version
-audio2text init
-```
-
-首个 npm 版本发布后，注册表自动让 `beta` 和 `latest` 都指向 `0.1.0-beta.2`，删除 `latest` 的请求返回 HTTP 400；npm 官方仓库中也有[相同首发行为的报告](https://github.com/npm/cli/issues/8490)。本项目当前仅为预览版，安装请显式使用 `@beta` 或 `@0.1.0-beta.2`。后续预览发布继续指定 `beta`，不主动更新 `latest`。
-
-npm 包仅包含入口、固定版本与校验信息、文档和许可证，安装时从 GitHub Release 获取匹配的平台程序；postinstall 不运行 init。禁用安装脚本时，首次执行命令也会准备程序。每次复用检查 SHA256，已有正常程序可离线使用；初次安装或缓存损坏需要连接 GitHub。下载进度在 stderr，失败返回稳定错误。临时下载文件保留供检查。
-
-## 发布维护
-
-同步 Cargo、锁文件、npm 和安装器默认版本后提交，创建并推送对应的 `v<version>` 标签。发布工作流必须运行在标签上，先通过两平台测试、构建和本地安装检查，再生成全量校验清单及平台无关 npm tarball。
-
-```powershell
-gh workflow run release.yml --ref v0.1.0-beta.2 -f publish_npm=false
-```
-
-工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，npm 账号启用双重验证后，通过浏览器完成 `npm login --registry=https://registry.npmjs.org`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball；发布操作可能需要再次完成浏览器验证。发布工具固定使用官方注册表，不修改本机镜像设置。再运行 `npm-smoke.yml` 验证两平台从 npm 注册表安装；本次首发例外的执行方式见下。
-
-发布工具等待注册表完成处理，重试时核对已发布版本的完整性，不重复上传。仅核验现有产物使用 `--verify-only`。本次已接受首发的自动 `latest` 标签例外，使用 `python scripts/publish-npm.py --verify-only --allow-initial-latest` 核验；该选项只允许注册表中有一个实际发布版本。保持已发布标签和附件不变，从维护分支运行更新后的检查：
-
-```powershell
-gh workflow run npm-smoke.yml --ref main -f release_tag=v0.1.0-beta.2 -f allow_initial_latest=true
-```
-
-首发后配置可信发布：
-
-```powershell
-npm trust github audio2text-cli --file release.yml --repo dat3133/audio2text-cli --allow-publish --registry=https://registry.npmjs.org
-```
-
-后续版本在 `release.yml` 开启 `publish_npm`，使用 Node 24 和 npm OIDC 发布；公开仓库的可信发布会自动生成来源证明。预览版发布命令始终指定 npm `beta` 标签，不主动切换 `latest`；首发例外如上所述。同版本已公开内容不覆盖，内容不同需发布新版本。
-
-## 开发验证
-
-```powershell
-cargo test --locked
-cargo clippy --locked --all-targets -- -D warnings
-python -m unittest discover -s tests -v
-node --test npm/test.mjs
-```
-
-Python worker 测试需要 NumPy 和 imageio-ffmpeg；真实模型测试另外需要对应运行时和模型。CI 配置覆盖两平台离线单元与接口测试；其结果不代替硬件、模型和长音频验收。贡献及发布验收说明见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 许可与来源
-
-项目代码 Apache-2.0；原始设计来自 qwen3-asr-transcribe 技能。模型和后端保留各自许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。发布附件和 npm 包另包含固定 Cargo 依赖的原始许可证声明。程序使用后端公开转写接口，不依赖 `_infer_asr`。
+项目代码采用 [Apache-2.0](LICENSE)，原始设计来自 qwen3-asr-transcribe 技能；模型与第三方依赖各自的许可证见 [第三方声明](THIRD_PARTY_NOTICES.md)。源码构建、开发测试和发布维护见 [贡献指南](CONTRIBUTING.md)。
