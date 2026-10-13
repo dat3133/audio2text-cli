@@ -9,9 +9,12 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
-from release_common import BINARIES, NPM_FILES, read_sums, validate_version, verify_release, version
+from release_common import BINARIES, NPM_FILES, npm_command, read_sums, validate_version, verify_release, version
 
 class ReleaseTests(unittest.TestCase):
+    def test_release_tools_target_official_registry(self):
+        self.assertEqual(npm_command('publish','fixture.tgz')[-1],'--registry=https://registry.npmjs.org')
+
     @unittest.skipUnless(os.name == 'nt', 'Windows installer regression')
     def test_windows_binary_http_manifest(self):
         binary=Path(os.environ.get('AUDIO2TEXT_BIN',ROOT/'target/debug/audio2text.exe'))

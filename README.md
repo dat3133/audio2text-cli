@@ -199,12 +199,12 @@ npm 包仅包含入口、固定版本与校验信息、文档和许可证，安�
 gh workflow run release.yml --ref v0.1.0-beta.2 -f publish_npm=false
 ```
 
-工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，通过浏览器完成 `npm login`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball。再运行 `gh workflow run npm-smoke.yml --ref v0.1.0-beta.2` 验证两平台从 npm 注册表安装。
+工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，npm 账号启用双重验证后，通过浏览器完成 `npm login --registry=https://registry.npmjs.org`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball；发布操作可能需要再次完成浏览器验证。发布工具固定使用官方注册表，不修改本机镜像设置。再运行 `gh workflow run npm-smoke.yml --ref v0.1.0-beta.2` 验证两平台从 npm 注册表安装。
 
 首发后配置可信发布：
 
 ```powershell
-npm trust github audio2text-cli --file release.yml --repo dat3133/audio2text-cli --allow-publish
+npm trust github audio2text-cli --file release.yml --repo dat3133/audio2text-cli --allow-publish --registry=https://registry.npmjs.org
 ```
 
 后续版本在 `release.yml` 开启 `publish_npm`，使用 Node 24 和 npm OIDC 发布；公开仓库的可信发布会自动生成来源证明。预览版始终使用 npm `beta` 标签，不切换 `latest`。同版本已公开内容不覆盖，内容不同需发布新版本。

@@ -44,7 +44,7 @@ def npm_command(*args):
     cli = entry.parent / "node_modules/npm/bin/npm-cli.js" if os.name == "nt" else entry
     if not cli.is_file():
         raise ValueError("Cannot locate npm CLI")
-    return [shutil.which("node") or "node", str(cli), *map(str, args)]
+    return [shutil.which("node") or "node", str(cli), *map(str, args), "--registry=https://registry.npmjs.org"]
 
 def run(args, **kwargs):
     return subprocess.run(list(map(str,args)), check=True, cwd=ROOT, **kwargs)
