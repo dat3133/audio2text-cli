@@ -14,7 +14,7 @@ if list(target.iterdir()):
 value = validate_version()
 entries = []
 for name in BINARIES:
-    sources = list(parts.rglob(name))
+    sources = [path for path in parts.rglob(name) if path.is_file()]
     if len(sources) != 1:
         raise SystemExit(f"Expected exactly one {name}, found {len(sources)}")
     file = target / name
@@ -23,7 +23,7 @@ for name in BINARIES:
 (target / "SHA256SUMS").write_text("\n".join(entries) + "\n", encoding="utf-8")
 for name in DOCUMENTS:
     shutil.copy2(name, target / name)
-notices = sorted(parts.rglob("native-notices-*.md"))
+notices = sorted(path for path in parts.rglob("native-notices-*.md") if path.is_file())
 if not notices:
     raise SystemExit("Native dependency notices are missing")
 with (target/"THIRD_PARTY_NOTICES.md").open("a",encoding="utf-8") as stream:

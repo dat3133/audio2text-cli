@@ -29,7 +29,9 @@ class ReleaseTests(unittest.TestCase):
         parts=work/"parts"
         parts.mkdir(parents=True)
         for name in BINARIES:
-            (parts/name).write_bytes(("binary fixture "+name).encode())
+            directory=parts/name
+            directory.mkdir()
+            (directory/name).write_bytes(("binary fixture "+name).encode())
         (parts/"native-notices-fixture.md").write_text("Fixture dependency notices",encoding="utf-8")
         output=work/"release"
         proc=subprocess.run([sys.executable,"scripts/assemble-release.py",str(parts),str(output)],cwd=ROOT,capture_output=True,text=True,encoding="utf-8")
