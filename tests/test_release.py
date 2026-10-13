@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,6 +12,15 @@ sys.path.insert(0,str(ROOT/"scripts"))
 from release_common import BINARIES, NPM_FILES, read_sums, validate_version, verify_release, version
 
 class ReleaseTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows installer regression')
+    def test_windows_binary_http_manifest(self):
+        binary=Path(os.environ.get('AUDIO2TEXT_BIN',ROOT/'target/debug/audio2text.exe'))
+        if not binary.is_file():
+            self.skipTest('Build CLI before installer regression')
+        import shutil
+        proc=subprocess.run([shutil.which('pwsh') or 'powershell','-NoProfile','-File',str(ROOT/'tests/test_installer.ps1'),'-Binary',str(binary.resolve())],cwd=ROOT,capture_output=True,text=True,encoding='utf-8')
+        self.assertEqual(proc.returncode,0,proc.stderr+proc.stdout)
+
     def test_tag_and_version_consistency(self):
         self.assertEqual(validate_version("v"+version()),version())
         with self.assertRaises(ValueError):

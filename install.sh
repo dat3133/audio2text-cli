@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 repository='dat3133/audio2text-cli'
-version='0.1.0-beta.1'
+version='0.1.0-beta.2'
 install_dir="${XDG_BIN_HOME:-$HOME/.local/bin}"
 no_init=0
 artifact_path=''

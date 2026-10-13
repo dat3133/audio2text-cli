@@ -2,7 +2,7 @@
 
 本地语音转文字 CLI：多步初始化向导、硬件感知的模型推荐，以及 agent 可直接解析的 JSON。
 
-项目目前为 **0.1.0-beta.1 预览版本**，源码维护于 [dat3133/audio2text-cli](https://github.com/dat3133/audio2text-cli)。发布入口为 [GitHub 预发布](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.1) 和 [npm beta 渠道](https://www.npmjs.com/package/audio2text-cli)。以下发布安装命令对应同版本产物；源码构建方式也可使用。
+项目目前为 **0.1.0-beta.2 预览版本**，源码维护于 [dat3133/audio2text-cli](https://github.com/dat3133/audio2text-cli)。发布入口为 [GitHub 预发布](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.2) 和 [npm beta 渠道](https://www.npmjs.com/package/audio2text-cli)。以下发布安装命令对应同版本产物；源码构建方式也可使用。
 
 ## 当前状态与限制
 
@@ -167,7 +167,7 @@ agent 根据退出码和错误代码决定下一步。转写不会隐式下载�
 
 ```powershell
 $installer = Join-Path $PWD 'audio2text-install.ps1'
-Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.1/install.ps1' -OutFile $installer
+Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.ps1' -OutFile $installer
 & $installer
 # 自动化跳过向导：& $installer -NoInit
 ```
@@ -175,7 +175,7 @@ Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v
 Linux 安装：
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.1/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.sh | sh
 # 自动化使用：... | sh -s -- --no-init
 ```
 
@@ -196,10 +196,10 @@ npm 包仅包含入口、固定版本与校验信息、文档和许可证，安�
 同步 Cargo、锁文件、npm 和安装器默认版本后提交，创建并推送对应的 `v<version>` 标签。发布工作流必须运行在标签上，先通过两平台测试、构建和本地安装检查，再生成全量校验清单及平台无关 npm tarball。
 
 ```powershell
-gh workflow run release.yml --ref v0.1.0-beta.1 -f publish_npm=false
+gh workflow run release.yml --ref v0.1.0-beta.2 -f publish_npm=false
 ```
 
-工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，通过浏览器完成 `npm login`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball。再运行 `gh workflow run npm-smoke.yml --ref v0.1.0-beta.1` 验证两平台从 npm 注册表安装。
+工作流先上传 GitHub 草稿并校验附件，再公开为预发布，并验证两平台匿名下载安装。首发下载 GitHub Release 的全部附件至 `dist/release`，通过浏览器完成 `npm login`，然后运行 `python scripts/publish-npm.py` 发布同一 tarball。再运行 `gh workflow run npm-smoke.yml --ref v0.1.0-beta.2` 验证两平台从 npm 注册表安装。
 
 首发后配置可信发布：
 

@@ -1,6 +1,6 @@
 param(
     [string]$Repository = 'dat3133/audio2text-cli',
-    [string]$Version = '0.1.0-beta.1',
+    [string]$Version = '0.1.0-beta.2',
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'audio2text\bin'),
     [switch]$NoInit,
     [switch]$NoPathUpdate,
@@ -21,7 +21,9 @@ if ($ArtifactPath) {
 } else {
     if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid -Repository; expected owner/repository.' }
     $base = "https://github.com/$Repository/releases/download/v$Version"
-    $checksums = (Invoke-WebRequest -Uri "$base/SHA256SUMS").Content
+    $manifestPath = $partial + '.SHA256SUMS'
+    Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile $manifestPath
+    $checksums = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
     Invoke-WebRequest -Uri "$base/$asset" -OutFile $partial
 }
 $entries = @($checksums -split '\r?\n' | Where-Object { $_ -match ('^[a-fA-F0-9]{64}\s+\*?' + [regex]::Escape($asset) + '$') })
