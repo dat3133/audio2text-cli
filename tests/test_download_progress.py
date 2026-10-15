@@ -213,7 +213,7 @@ s=importlib.util.spec_from_file_location('worker',sys.argv[1])
 w=importlib.util.module_from_spec(s); s.loader.exec_module(w)
 sys.stdin=io.StringIO('{}')
 print('准备计划 / 已确认的模型与目录',file=sys.stderr,flush=True)
-def execute(request):
+def execute(request, deferred_backends=None):
     with w.DownloadProgress('中文 模型文件-' * 5,100) as p:
         for done in range(101):
             p.update(done)

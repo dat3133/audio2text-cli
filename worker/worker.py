@@ -612,7 +612,7 @@ def transcribe(request, backend):
     return {"results": results, "processing_seconds": round(sum(durations), 3), "peak_worker_rss_bytes": peak_memory_bytes()}
 
 
-def execute(request):
+def execute(request, deferred_backends=None):
     action = request["action"]
     if action != "download":
         offline()
@@ -633,6 +633,12 @@ def execute(request):
         batch_size = request.get("batch_size", 0) or (4 if device.startswith("cuda") and model["backend"] == "qwen3-asr" else 1)
         started = time.monotonic()
         backend = Backend(model, path, device, batch_size)
+        if (deferred_backends is not None and sys.platform == "win32"
+                and model["backend"] == "faster-whisper" and device.startswith("cuda")):
+            # CTranslate2 can abort while destroying a Windows CUDA model:
+            # https://github.com/SYSTRAN/faster-whisper/issues/1293
+            # Keep it alive through response delivery, including handled errors.
+            deferred_backends.append(backend)
         loaded = time.monotonic() - started
         if action == "selftest":
             result = backend.infer([np.zeros(SR * 2, dtype=np.float32)], "auto", "")
@@ -652,9 +658,10 @@ def main():
     # Protect the protocol even from C extensions printing directly to fd 1.
     protocol = os.fdopen(os.dup(1), "w", encoding="utf-8")
     os.dup2(2, 1)
+    deferred_backends = []
     try:
         request = json.load(sys.stdin)
-        result = execute(request)
+        result = execute(request, deferred_backends)
         status = 0
     except KeyboardInterrupt:
         result = WorkerError("CANCELLED", "任务已取消", 130).result()
@@ -670,6 +677,14 @@ def main():
     json.dump(result, protocol, ensure_ascii=False)
     protocol.write("\n")
     protocol.flush()
+    if deferred_backends:
+        # This is a one-request child. Files are closed/fsynced and inference is
+        # finished before serialization; only the faulty native teardown remains.
+        # Explicitly flush before _exit, which bypasses Python/C++ destructors.
+        # Preserve status: inference errors and cancellation must never become OK.
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(status)
     return status
 
 
