@@ -111,6 +111,16 @@ audio2text transcribe "meeting.m4a" --context-file "terms.txt"
 
 ## agent 使用
 
+可按下面的方式为 Claude Code、Codex 等 agent 安装使用指南（当前 Skills CLI 需要 **Node.js 22.20+ 和 Git**）：
+
+```powershell
+npx skills add https://github.com/dat3133/audio2text-cli --skill audio2text
+# 跨项目使用：全局安装到 Codex 和 Claude Code
+npx skills add https://github.com/dat3133/audio2text-cli --skill audio2text --global --agent codex claude-code
+```
+
+默认安装到当前项目，`--global` 安装到用户范围；Windows 无法创建链接时可加 `--copy`。安装 skill 只获取 agent 指南，CLI 仍按快速开始安装，模型和运行环境由 `init` 准备。agent 会优先复用已有环境，缺失时查看准备计划，并按用户已有授权继续。
+
 自动化调用应显式使用 `--non-interactive`，转写不会自动下载模型或打开向导：
 
 ```powershell

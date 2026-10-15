@@ -35,6 +35,20 @@ Storage tests isolate the platform configuration directory from the developer pr
 
 Download-progress checks use fake streams, a local HTTP redirect and POSIX terminal emulation to verify resumption, retries, cancellation, layout and JSON stdout isolation. The fixed uv version can be checked with a small wheel and an isolated cache/target; stdout must be piped and stderr attached to the terminal, matching the CLI. uv deliberately hides native progress when `RUST_LOG` is set, so omit that development-only variable in this interactive smoke test. Do not change the user's logging or `UV_NO_PROGRESS` preferences. These checks require no model or Torch download.
 
+### Agent skill installation
+
+The skill stays self-contained at `skills/audio2text/SKILL.md`. Verify its instructions against CLI help and the JSON interface when changing commands or readiness handling. Skill installation supplies instructions, not the CLI, a model or a runtime.
+
+With Node.js 22.20+ and Git, run the pinned Skills CLI 1.7.2 smoke check:
+
+```powershell
+python scripts/smoke-skill-install.py
+# After pushing, verify discovery and installation from the public repository too.
+python scripts/smoke-skill-install.py --source https://github.com/dat3133/audio2text-cli
+```
+
+The default source is the local checkout, so PR checks exercise the proposed skill. Windows/Linux CI covers project/global scopes and default/copy modes for Codex and Claude Code. Each case isolates the user profile, agent directories and project under ignored `.test-data`, checks installed names, scope, agent ownership and file contents, and confirms no ASR resources were prepared. Default mode accepts the Skills CLI's copy fallback when Windows cannot create links. Fixtures remain for diagnostics; real user skills are not overwritten. Network access is needed for the pinned installer and, with `--source`, GitHub.
+
 ## CLI interface reference
 
 Business commands return one JSON object on stdout; progress and dependency logs go to stderr. Top-level status is `ok`, `partial` or `error`; batch items keep input order and carry their own status, warnings and error. `--no-text` requires file output and returns `text: null` with the absolute output path. Agents must explicitly initialize with `--non-interactive`; transcription never downloads resources.
