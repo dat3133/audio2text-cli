@@ -1,5 +1,6 @@
 use crate::{
     catalog::Model,
+    progress,
     state::{self, AppError, Result},
 };
 use serde_json::{Value, json};
@@ -103,6 +104,7 @@ pub fn run_command(mut cmd: Command) -> Result<()> {
         if state::check_cancel().is_err() {
             terminate(&mut child);
             let _ = reader.join();
+            progress::interrupted();
             return state::check_cancel();
         }
         if let Some(status) = child.try_wait().map_err(AppError::io)? {
@@ -162,6 +164,7 @@ pub fn worker(_root: &Path, py: &Path, request: Value, offline: bool) -> Result<
         if state::check_cancel().is_err() {
             terminate(&mut child);
             let _ = reader.join();
+            progress::interrupted();
             return Err(AppError::new(
                 "CANCELLED",
                 "任务已取消",
@@ -232,6 +235,8 @@ fn uv(root: &Path) -> Result<PathBuf> {
         match client.get(&url).send().and_then(|r| r.error_for_status()) {
             Ok(mut response) => {
                 bytes.clear();
+                let mut progress = progress::Download::new(asset, response.content_length());
+                progress.update(0);
                 let mut block = [0u8; 65536];
                 loop {
                     state::check_cancel()?;
@@ -242,6 +247,7 @@ fn uv(root: &Path) -> Result<PathBuf> {
                         break;
                     }
                     bytes.extend_from_slice(&block[..n]);
+                    progress.update(bytes.len() as u64);
                     if bytes.len() > 256 * 1024 * 1024 {
                         return Err(AppError::new(
                             "DOWNLOAD_FAILED",
@@ -251,6 +257,7 @@ fn uv(root: &Path) -> Result<PathBuf> {
                         ));
                     }
                 }
+                progress.finish();
                 if format!("{:x}", Sha256::digest(&bytes)) == hash {
                     break;
                 }
@@ -313,15 +320,23 @@ fn uv(root: &Path) -> Result<PathBuf> {
     Ok(binary)
 }
 fn uv_command(binary: &Path, root: &Path) -> Command {
+    uv_command_with_progress(binary, root, progress::enabled())
+}
+fn uv_command_with_progress(binary: &Path, root: &Path, dynamic: bool) -> Command {
     let mut cmd = Command::new(binary);
     cmd.env("UV_PYTHON_INSTALL_DIR", root.join("python"))
         .env("UV_CACHE_DIR", root.join("cache/uv"))
-        .env("UV_NO_PROGRESS", "1")
         .env_remove("VIRTUAL_ENV")
         .env_remove("PYTHONHOME")
         .env_remove("PYTHONPATH");
+    if !dynamic {
+        cmd.env("UV_NO_PROGRESS", "1")
+            .env("NO_COLOR", "1")
+            .args(["--color", "never"]);
+    }
     cmd
 }
+
 pub fn prepare(
     root: &Path,
     m: &Model,
@@ -418,4 +433,28 @@ pub fn self_test(root: &Path, py: &Path, m: &Model, path: &Path, device: &str) -
         true,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+
+    #[test]
+    fn uv_terminal_mode_inherits_user_progress_preference() {
+        let interactive = uv_command_with_progress(Path::new("uv"), Path::new("data"), true);
+        assert!(
+            interactive
+                .get_envs()
+                .all(|(name, _)| name != "UV_NO_PROGRESS")
+        );
+        assert!(interactive.get_args().next().is_none());
+        let plain = uv_command_with_progress(Path::new("uv"), Path::new("data"), false);
+        assert!(
+            plain
+                .get_envs()
+                .any(|(name, value)| name == "UV_NO_PROGRESS"
+                    && value == Some(std::ffi::OsStr::new("1")))
+        );
+        assert_eq!(plain.get_args().collect::<Vec<_>>(), ["--color", "never"]);
+    }
 }

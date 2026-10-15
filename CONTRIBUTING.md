@@ -33,6 +33,8 @@ Python worker tests require NumPy and imageio-ffmpeg. On POSIX, pyte and a pseud
 
 Storage tests isolate the platform configuration directory from the developer profile. They cover location precedence, invalid or missing saved locations, relative/Unicode paths, per-command overrides, missing volumes and permission failures. Setup tests inject resource preparation and location persistence failures to verify that only successful initialization commits the new default. POSIX terminal tests also exercise repeated plan-page edits, advanced settings, rejected paths, returning to model selection, Escape and Ctrl+C without creating resources. Keep these tests offline; real model self-tests remain part of inference acceptance.
 
+Download-progress checks use fake streams, a local HTTP redirect and POSIX terminal emulation to verify resumption, retries, cancellation, layout and JSON stdout isolation. The fixed uv version can be checked with a small wheel and an isolated cache/target; stdout must be piped and stderr attached to the terminal, matching the CLI. uv deliberately hides native progress when `RUST_LOG` is set, so omit that development-only variable in this interactive smoke test. Do not change the user's logging or `UV_NO_PROGRESS` preferences. These checks require no model or Torch download.
+
 ## CLI interface reference
 
 Business commands return one JSON object on stdout; progress and dependency logs go to stderr. Top-level status is `ok`, `partial` or `error`; batch items keep input order and carry their own status, warnings and error. `--no-text` requires file output and returns `text: null` with the absolute output path. Agents must explicitly initialize with `--non-interactive`; transcription never downloads resources.

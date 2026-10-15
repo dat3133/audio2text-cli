@@ -1,5 +1,6 @@
 mod catalog;
 mod menu;
+mod progress;
 mod runtime;
 mod setup;
 mod state;

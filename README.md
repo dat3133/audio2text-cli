@@ -2,7 +2,7 @@
 
 本地语音转文字 CLI，支持音视频文件、批量转写和多步模型配置。可直接在终端使用，也可由 Claude Code、Codex 等 agent 调用；转写离线进行，不上传音频或正文。
 
-当前为 **0.1.0-beta.4 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.4)
+当前为 **0.1.0-beta.5 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.5)
 
 ## 快速开始
 
@@ -16,19 +16,21 @@ audio2text transcribe "meeting.m4a" --language zh --format text
 
 安装只准备 CLI；首次 `init` 会引导选择模型，下载模型及运行环境。完成初始化后即可离线转写。初始化需要联网，npm 安装还需要连接 GitHub 下载平台程序。
 
+下载时终端会显示进度：模型文件显示百分比和已下载/总大小，Python 及依赖使用 uv 原生进度，随后分别进行校验、安装和自检。续传按已有字节继续，缓存资源跳过下载。输出重定向、终端能力不足或设置 `AUDIO2TEXT_PLAIN=1` 时使用普通日志；进度和日志均写入 stderr，不影响 JSON 结果。
+
 当前仍为预览版，请明确安装 `@beta` 或固定版本；首发的 `latest` 标签也指向预览版。
 
 ```powershell
 audio2text --version
 # 固定到当前版本
-npm install -g audio2text-cli@0.1.0-beta.4
+npm install -g audio2text-cli@0.1.0-beta.5
 # npm 镜像未同步时，临时使用官方注册表
 npm install -g audio2text-cli@beta --registry=https://registry.npmjs.org
 ```
 
 ## 其他安装方式
 
-无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.4) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
+无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.5) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
 
 <details>
 <summary>Windows / Linux 安装脚本</summary>
@@ -37,7 +39,7 @@ Windows PowerShell：
 
 ```powershell
 $installer = Join-Path $PWD 'audio2text-install.ps1'
-Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.4/install.ps1' -OutFile $installer
+Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.5/install.ps1' -OutFile $installer
 & $installer
 # 跳过初始化向导：& $installer -NoInit
 ```
@@ -45,7 +47,7 @@ Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v
 Linux：
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.4/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.5/install.sh | sh
 # 跳过初始化向导：在上面的管道末尾使用 sh -s -- --no-init
 ```
 

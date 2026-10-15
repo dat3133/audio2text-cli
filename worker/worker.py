@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 import types
+import unicodedata
 import urllib.error
 import urllib.request
 import uuid
@@ -184,6 +185,85 @@ def source_url(model, source, name):
     return f"https://huggingface.co/{model['repo']}/resolve/{model['revision']}/{name}"
 
 
+def progress_enabled(stream):
+    return bool(getattr(stream, "isatty", lambda: False)()) and os.environ.get("TERM") != "dumb" and os.environ.get("AUDIO2TEXT_PLAIN") != "1"
+
+
+def text_width(text):
+    return sum(0 if unicodedata.combining(ch) else 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
+
+
+def truncate_cells(text, width):
+    if text_width(text) <= width:
+        return text
+    if width <= 0:
+        return ""
+    result, used = [], 0
+    for ch in text:
+        size = text_width(ch)
+        if used + size > width - 1:
+            break
+        result.append(ch)
+        used += size
+    return "".join(result) + "…"
+
+
+def progress_line(label, done, total, tick, columns):
+    width = max(0, columns - 1)
+    value = total or done
+    divisor, unit = next((divisor, unit) for divisor, unit in ((1024**3, "GiB"), (1024**2, "MiB"), (1024, "KiB"), (1, "B")) if value >= divisor or divisor == 1)
+    if total:
+        percentage = min(100, done * 100 // total)
+        bar_size = 20 if width >= 76 else 10
+        filled = percentage * bar_size // 100
+        suffix = f" [{'#' * filled}{'-' * (bar_size - filled)}] {percentage:3}% {done / divisor:.1f}/{total / divisor:.1f} {unit}"
+    else:
+        suffix = f" [{'|/-'[tick % 3]}] {done / divisor:.1f} {unit}"
+    label = "".join(" " if unicodedata.category(ch).startswith("C") else ch for ch in label)
+    budget = max(0, width - text_width(suffix))
+    return truncate_cells(label, budget) + suffix if budget else truncate_cells(suffix.lstrip(), width)
+
+
+class DownloadProgress:
+    """A bounded, throttled stderr row. Context exit always ends the row."""
+    def __init__(self, label, total, stream=None, clock=None):
+        self.label, self.total = label, total
+        self.stream = sys.stderr if stream is None else stream
+        self.clock = time.monotonic if clock is None else clock
+        self.dynamic = progress_enabled(self.stream)
+        self.done, self.tick, self.last = 0, 0, None
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def update(self, done):
+        self.done = done
+        now = self.clock()
+        if self.dynamic and (self.last is None or now - self.last >= 0.2):
+            self.draw()
+            self.last = now
+
+    def draw(self):
+        try:
+            columns = os.get_terminal_size(self.stream.fileno()).columns
+        except (OSError, ValueError, AttributeError):
+            columns = 80
+        self.stream.write("\r" + progress_line(self.label, self.done, self.total, self.tick, columns) + "\x1b[K")
+        self.stream.flush()
+        self.tick += 1
+
+    def __exit__(self, exception_type, exception, traceback):
+        if self.closed:
+            return
+        if self.dynamic:
+            self.draw()
+            self.stream.write("\n")
+        status = "下载完成，准备校验" if exception_type is None else "下载未完成，保留续传数据"
+        print(f"{self.label}：{status}", file=self.stream, flush=True)
+        self.closed = True
+
+
 def download_file(url, part, expected_size, opener=urllib.request.urlopen):
     offset = part.stat().st_size if part.exists() else 0
     if offset > expected_size:
@@ -192,30 +272,33 @@ def download_file(url, part, expected_size, opener=urllib.request.urlopen):
     headers = {"User-Agent": "audio2text/0.1.0"}
     if offset:
         headers["Range"] = f"bytes={offset}-"
-    with opener(urllib.request.Request(url, headers=headers), timeout=60) as response:
-        status = response.status
-        if offset and status == 206:
-            value = response.headers.get("Content-Range", "")
-            if not value.startswith(f"bytes {offset}-"):
-                raise WorkerError("DOWNLOAD_FAILED", "服务器返回了错误的续传范围", 6)
-        elif status == 200:
-            offset = 0
-        else:
-            raise WorkerError("DOWNLOAD_FAILED", f"服务器返回 HTTP {status}", 6)
-        with part.open("ab" if offset else "wb") as output:
-            total = offset
-            while True:
-                data = response.read(1024 * 1024)
-                if not data:
-                    break
-                total += len(data)
-                if total > expected_size:
-                    raise WorkerError("DOWNLOAD_FAILED", "下载内容超出固定模型文件大小", 6)
-                output.write(data)
-            output.flush()
-            os.fsync(output.fileno())
-    if part.stat().st_size != expected_size:
-        raise WorkerError("DOWNLOAD_FAILED", "下载不完整，已保留续传文件", 6, retryable=True)
+    with DownloadProgress(part.name.removesuffix(".part"), expected_size) as progress:
+        with opener(urllib.request.Request(url, headers=headers), timeout=60) as response:
+            status = response.status
+            if offset and status == 206:
+                value = response.headers.get("Content-Range", "")
+                if not value.startswith(f"bytes {offset}-"):
+                    raise WorkerError("DOWNLOAD_FAILED", "服务器返回了错误的续传范围", 6)
+            elif status == 200:
+                offset = 0
+            else:
+                raise WorkerError("DOWNLOAD_FAILED", f"服务器返回 HTTP {status}", 6)
+            progress.update(offset)
+            with part.open("ab" if offset else "wb") as output:
+                total = offset
+                while True:
+                    data = response.read(1024 * 1024)
+                    if not data:
+                        break
+                    total += len(data)
+                    if total > expected_size:
+                        raise WorkerError("DOWNLOAD_FAILED", "下载内容超出固定模型文件大小", 6)
+                    output.write(data)
+                    progress.update(total)
+                output.flush()
+                os.fsync(output.fileno())
+        if part.stat().st_size != expected_size:
+            raise WorkerError("DOWNLOAD_FAILED", "下载不完整，已保留续传文件", 6, retryable=True)
 
 
 def download(model, path, source):
@@ -237,12 +320,13 @@ def download(model, path, source):
         name, size, method, expected = entry
         target = path / name
         if verified(path, entry):
-            print(f"复用 {name}", file=sys.stderr)
+            print(f"已缓存，跳过下载：{name}", file=sys.stderr)
             continue
         part = target.with_name(target.name + ".part")
         if part.is_file() and part.stat().st_size == size:
             if digest(part, method) == expected:
                 os.replace(part, target)
+                print(f"已缓存，跳过下载：{name}", file=sys.stderr)
                 continue
             part.rename(part.with_name(part.name + ".invalid-" + uuid.uuid4().hex))
         if target.exists():
@@ -251,6 +335,7 @@ def download(model, path, source):
             try:
                 print(f"下载 {name}，{size / 1024**2:.1f} MiB（{attempt + 1}/3，{selected}）", file=sys.stderr)
                 download_file(source_url(model, selected, name), part, size)
+                print(f"校验 {name} …", file=sys.stderr)
                 if digest(part, method) != expected:
                     part.rename(part.with_name(part.name + ".invalid-" + uuid.uuid4().hex))
                     raise WorkerError("CHECKSUM_MISMATCH", f"{name} 校验不符", 6)
@@ -259,6 +344,7 @@ def download(model, path, source):
             except (OSError, WorkerError) as e:
                 if attempt == 2:
                     raise WorkerError("DOWNLOAD_FAILED", str(e), 6, "重新运行；完整文件和可续传部分会复用。", True) from e
+                print(f"下载失败：{e}；准备第 {attempt + 2}/3 次尝试", file=sys.stderr)
                 time.sleep(attempt + 1)
     return {"source": selected, **verify(model, path)}
 
