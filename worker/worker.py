@@ -219,6 +219,10 @@ def progress_line(label, done, total, tick, columns):
         suffix = f" [{'#' * filled}{'-' * (bar_size - filled)}] {percentage:3}% {done / divisor:.1f}/{total / divisor:.1f} {unit}"
     else:
         suffix = f" [{'|/-'[tick % 3]}] {done / divisor:.1f} {unit}"
+    return fit_progress_line(label, suffix, width)
+
+
+def fit_progress_line(label, suffix, width):
     label = "".join(" " if unicodedata.category(ch).startswith("C") else ch for ch in label)
     budget = max(0, width - text_width(suffix))
     return truncate_cells(label, budget) + suffix if budget else truncate_cells(suffix.lstrip(), width)
@@ -244,12 +248,14 @@ class DownloadProgress:
             self.draw()
             self.last = now
 
-    def draw(self):
+    def columns(self):
         try:
-            columns = os.get_terminal_size(self.stream.fileno()).columns
+            return os.get_terminal_size(self.stream.fileno()).columns
         except (OSError, ValueError, AttributeError):
-            columns = 80
-        self.stream.write("\r" + progress_line(self.label, self.done, self.total, self.tick, columns) + "\x1b[K")
+            return 80
+
+    def draw(self):
+        self.stream.write("\r" + progress_line(self.label, self.done, self.total, self.tick, self.columns()) + "\x1b[K")
         self.stream.flush()
         self.tick += 1
 
@@ -260,7 +266,8 @@ class DownloadProgress:
             self.draw()
             self.stream.write("\n")
         status = "下载完成，准备校验" if exception_type is None else "下载未完成，保留续传数据"
-        print(f"{self.label}：{status}", file=self.stream, flush=True)
+        message = fit_progress_line(self.label, "：" + status, max(0, self.columns() - 1)) if self.dynamic else f"{self.label}：{status}"
+        print(message, file=self.stream, flush=True)
         self.closed = True
 
 

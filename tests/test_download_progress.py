@@ -77,6 +77,18 @@ class ProgressTests(unittest.TestCase):
         self.assertTrue(stream.getvalue().endswith("下载未完成，保留续传数据\n"))
         self.assertNotIn("100%", stream.getvalue())
 
+    def test_completion_and_failure_summaries_fit_narrow_terminals(self):
+        for cancel in (False, True):
+            stream = Terminal()
+            label = "中文 模型文件-" * 20
+            with patch.object(worker.DownloadProgress, "columns", return_value=40):
+                progress = worker.DownloadProgress(label, 6, stream)
+                progress.update(3 if cancel else 6)
+                progress.__exit__(KeyboardInterrupt if cancel else None, None, None)
+            summary = stream.getvalue().splitlines()[-1]
+            self.assertLess(worker.text_width(summary), 40)
+            self.assertIn("下载未完成" if cancel else "下载完成", summary)
+
     def test_resume_and_server_restart_begin_at_the_actual_offset(self):
         for status, payload, expected_start in [(206, b"def", 3), (200, b"abcdef", 0)]:
             with self.subTest(status=status):

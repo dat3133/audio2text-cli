@@ -74,11 +74,15 @@ fn line(label: &str, done: u64, total: Option<u64>, tick: usize, columns: usize)
             amount(done, None)
         )
     };
+    fit_line(label, &suffix, width)
+}
+
+fn fit_line(label: &str, suffix: &str, width: usize) -> String {
     let label: String = label
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
-    let budget = width.saturating_sub(measure_text_width(&suffix));
+    let budget = width.saturating_sub(measure_text_width(suffix));
     if budget == 0 {
         truncate_str(suffix.trim_start(), width, "").into_owned()
     } else {
@@ -147,15 +151,21 @@ impl Download {
             self.draw();
             let _ = self.term.write_line("");
         }
-        let _ = self.term.write_line(&format!(
-            "{}：{}",
-            self.label,
-            if success {
-                "下载完成，准备校验"
-            } else {
-                "下载未完成"
-            }
-        ));
+        let suffix = if success {
+            "：下载完成，准备校验"
+        } else {
+            "：下载未完成"
+        };
+        let message = if self.dynamic {
+            fit_line(
+                &self.label,
+                suffix,
+                usize::from(self.term.size().1).saturating_sub(1),
+            )
+        } else {
+            format!("{}{suffix}", self.label)
+        };
+        let _ = self.term.write_line(&message);
         let _ = self.term.flush();
         self.closed = true;
     }
