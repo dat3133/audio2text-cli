@@ -2,7 +2,7 @@
 
 本地语音转文字 CLI，支持音视频文件、批量转写和多步模型配置。可直接在终端使用，也可由 Claude Code、Codex 等 agent 调用；转写离线进行，不上传音频或正文。
 
-当前为 **0.1.0-beta.2 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.2)
+当前为 **0.1.0-beta.3 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.3)
 
 ## 快速开始
 
@@ -21,14 +21,14 @@ audio2text transcribe "meeting.m4a" --language zh --format text
 ```powershell
 audio2text --version
 # 固定到当前版本
-npm install -g audio2text-cli@0.1.0-beta.2
+npm install -g audio2text-cli@0.1.0-beta.3
 # npm 镜像未同步时，临时使用官方注册表
 npm install -g audio2text-cli@beta --registry=https://registry.npmjs.org
 ```
 
 ## 其他安装方式
 
-无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.2) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
+无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.3) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
 
 <details>
 <summary>Windows / Linux 安装脚本</summary>
@@ -37,7 +37,7 @@ Windows PowerShell：
 
 ```powershell
 $installer = Join-Path $PWD 'audio2text-install.ps1'
-Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.ps1' -OutFile $installer
+Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.3/install.ps1' -OutFile $installer
 & $installer
 # 跳过初始化向导：& $installer -NoInit
 ```
@@ -45,7 +45,7 @@ Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v
 Linux：
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.2/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.3/install.sh | sh
 # 跳过初始化向导：在上面的管道末尾使用 sh -s -- --no-init
 ```
 
@@ -55,7 +55,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/
 
 ## 初始化与模型
 
-`audio2text init` 依次检测环境，并让你选择语言、均衡/准确率/速度偏好、模型及下载源。推荐模型会预选，仍可更换；高级配置可设置设备、数据目录、批大小和分段长度。方向键选择、Enter 确认，可返回上一步，Ctrl+C 取消。
+`audio2text init` 依次检测环境，并让你选择语言、均衡/准确率/速度偏好、模型及下载源。推荐模型会预选，仍可更换；高级配置可设置设备、数据目录、批大小和分段长度。方向键选择、Enter 确认，可返回上一步，Ctrl+C 取消。长模型说明按窗口宽度换行，菜单随选择滚动；窗口空间不足时改用编号选择，也可设置 `AUDIO2TEXT_PLAIN=1` 使用编号界面。
 
 ```powershell
 # 仅查看计划，不下载、不修改配置

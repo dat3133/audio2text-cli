@@ -1,6 +1,6 @@
 param(
     [string]$Repository = 'dat3133/audio2text-cli',
-    [string]$Version = '0.1.0-beta.2',
+    [string]$Version = '0.1.0-beta.3',
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'audio2text\bin'),
     [switch]$NoInit,
     [switch]$NoPathUpdate,

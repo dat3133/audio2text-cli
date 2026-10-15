@@ -1,10 +1,10 @@
 use crate::{
-    catalog,
+    catalog, menu,
     setup::{self, Options, Settings},
     state::{self, AppError, Config, Result},
 };
 use console::Term;
-use dialoguer::{Input, Select, theme::ColorfulTheme};
+use dialoguer::{Input, theme::ColorfulTheme};
 use std::{
     io::IsTerminal,
     path::{Path, PathBuf},
@@ -27,47 +27,52 @@ fn choose(title: &str, labels: &[String], default: usize, back: bool) -> Result<
     if back {
         items.push("← 返回上一步".into());
     }
-    let selected = if std::env::var("TERM").as_deref() == Ok("dumb")
-        || std::env::var("AUDIO2TEXT_PLAIN").as_deref() == Ok("1")
-    {
-        loop {
-            eprintln!("\n{title}");
-            for (i, item) in items.iter().enumerate() {
-                eprintln!(
-                    "  {}. {}{}",
-                    i + 1,
-                    item,
-                    if i == default { "（默认）" } else { "" }
-                );
-            }
-            let answer: String = Input::new()
-                .with_prompt("输入编号")
-                .allow_empty(true)
-                .interact_on(&Term::stderr())
-                .map_err(ui_error)?;
-            if answer.is_empty() {
-                break default;
-            }
-            if let Ok(n) = answer.parse::<usize>()
-                && n > 0
-                && n <= items.len()
-            {
-                break n - 1;
-            }
-            eprintln!("请输入有效编号。");
-        }
+    let default = default.min(items.len() - 1);
+    let plain = std::env::var("TERM").as_deref() == Ok("dumb")
+        || std::env::var("AUDIO2TEXT_PLAIN").as_deref() == Ok("1");
+    let selected = if plain {
+        choose_number(title, &items, default)?
     } else {
-        Select::with_theme(&ColorfulTheme::default())
-            .with_prompt(title)
-            .items(&items)
-            .default(default.min(items.len() - 1))
-            .interact_on(&Term::stderr())
-            .map_err(ui_error)?
+        match menu::select(&Term::stderr(), title, &items, default).map_err(ui_error)? {
+            menu::Selection::Chosen(index) => index,
+            menu::Selection::Plain(index) => {
+                eprintln!("终端空间不足，改用编号选择；直接回车保留当前选项。");
+                choose_number(title, &items, index)?
+            }
+        }
     };
     if back && selected == labels.len() {
         Ok(None)
     } else {
         Ok(Some(selected))
+    }
+}
+fn choose_number(title: &str, items: &[String], default: usize) -> Result<usize> {
+    loop {
+        eprintln!("\n{title}");
+        for (i, item) in items.iter().enumerate() {
+            eprintln!(
+                "  {}. {}{}",
+                i + 1,
+                item,
+                if i == default { "（默认）" } else { "" }
+            );
+        }
+        let answer: String = Input::new()
+            .with_prompt("输入编号")
+            .allow_empty(true)
+            .interact_on(&Term::stderr())
+            .map_err(ui_error)?;
+        if answer.is_empty() {
+            return Ok(default);
+        }
+        if let Ok(n) = answer.parse::<usize>()
+            && n > 0
+            && n <= items.len()
+        {
+            return Ok(n - 1);
+        }
+        eprintln!("请输入有效编号。");
     }
 }
 fn input(title: &str, default: String) -> Result<String> {

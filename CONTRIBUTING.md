@@ -24,12 +24,12 @@ Run the existing checks before contributing code:
 cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 cargo build --locked
-python -m pip install numpy==2.2.6 imageio-ffmpeg==0.6.0
+python -m pip install numpy==2.2.6 imageio-ffmpeg==0.6.0 pyte==0.8.2
 python -m unittest discover -s tests -v
 node --test npm/test.mjs
 ```
 
-Python worker tests require NumPy and imageio-ffmpeg. Real inference tests additionally require the matching runtime and model. Windows/Linux CI checks unit tests, CLI behavior and packaging; these checks do not replace hardware, inference or long-audio acceptance. Documentation-only edits require command/link checks and `git diff --check`, without repeating inference benchmarks.
+Python worker tests require NumPy and imageio-ffmpeg. On POSIX, pyte and a pseudo-terminal exercise real wizard navigation and check that Chinese model labels do not erase completed steps; these tests skip on Windows. Real inference tests additionally require the matching runtime and model. Windows/Linux CI checks unit tests, CLI behavior and packaging; these checks do not replace hardware, inference or long-audio acceptance. Documentation-only edits require command/link checks and `git diff --check`, without repeating inference benchmarks.
 
 ## CLI interface reference
 
