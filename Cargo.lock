@@ -76,7 +76,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "audio2text"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "clap",
  "console",

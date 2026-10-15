@@ -3,6 +3,7 @@ mod menu;
 mod runtime;
 mod setup;
 mod state;
+mod storage;
 mod wizard;
 
 use clap::{Args, Parser, Subcommand};
@@ -228,18 +229,26 @@ fn dispatch(command: &Command, root: &Path, cfg: &Config, format: &str) -> Resul
                 loop {
                     match setup::execute(&settings, true) {
                         Ok(data) => {
-                            eprintln!("\n初始化成功。示例：audio2text transcribe <file>");
+                            eprintln!(
+                                "\n初始化成功。示例：{}",
+                                data["next_command"]
+                                    .as_str()
+                                    .unwrap_or("audio2text transcribe <file>")
+                            );
                             break data;
                         }
                         Err(e) if e.exit == 130 => return Err(e),
                         Err(e) => match wizard::recovery(&e)? {
                             0 => continue,
                             1 => {
+                                let remember = settings.remember_location;
+                                let options = settings.options();
                                 settings = wizard::run(
                                     &settings.root,
                                     &Config::load(&settings.root)?,
-                                    &init.options,
+                                    &options,
                                 )?;
+                                settings.remember_location |= remember;
                             }
                             _ => return Err(e),
                         },
@@ -645,6 +654,24 @@ mod tests {
                 .unwrap_err()
                 .code,
             "NO_COMPATIBLE_MODEL"
+        );
+    }
+    #[test]
+    fn disk_assessment_uses_the_actual_missing_resource_budget() {
+        let mut hw = cpu();
+        hw.disk_available_bytes = Some(1024);
+        let model = catalog::find("whisper/tiny").unwrap();
+        assert_ne!(
+            catalog::assess_required(&model, &hw, "cpu", "auto", 1024).0,
+            "incompatible"
+        );
+        assert_eq!(
+            catalog::assess_required(&model, &hw, "cpu", "auto", 1025).0,
+            "incompatible"
+        );
+        assert_ne!(
+            catalog::assess_required(&model, &hw, "cpu", "auto", 0).0,
+            "incompatible"
         );
     }
     #[test]

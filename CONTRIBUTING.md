@@ -31,6 +31,8 @@ node --test npm/test.mjs
 
 Python worker tests require NumPy and imageio-ffmpeg. On POSIX, pyte and a pseudo-terminal exercise real wizard navigation and check that Chinese model labels do not erase completed steps; these tests skip on Windows. Real inference tests additionally require the matching runtime and model. Windows/Linux CI checks unit tests, CLI behavior and packaging; these checks do not replace hardware, inference or long-audio acceptance. Documentation-only edits require command/link checks and `git diff --check`, without repeating inference benchmarks.
 
+Storage tests isolate the platform configuration directory from the developer profile. They cover location precedence, invalid or missing saved locations, relative/Unicode paths, per-command overrides, missing volumes and permission failures. Setup tests inject resource preparation and location persistence failures to verify that only successful initialization commits the new default. POSIX terminal tests also exercise repeated plan-page edits, advanced settings, rejected paths, returning to model selection, Escape and Ctrl+C without creating resources. Keep these tests offline; real model self-tests remain part of inference acceptance.
+
 ## CLI interface reference
 
 Business commands return one JSON object on stdout; progress and dependency logs go to stderr. Top-level status is `ok`, `partial` or `error`; batch items keep input order and carry their own status, warnings and error. `--no-text` requires file output and returns `text: null` with the absolute output path. Agents must explicitly initialize with `--non-interactive`; transcription never downloads resources.

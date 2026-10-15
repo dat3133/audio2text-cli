@@ -157,9 +157,115 @@ pub fn select(term: &Term, title: &str, items: &[String], default: usize) -> io:
     }
 }
 
+fn edit_line(chars: &[char], cursor: usize, width: usize) -> String {
+    let mut start = cursor;
+    let before_budget = if cursor == chars.len() {
+        width - 4
+    } else {
+        (width - 4) / 2
+    };
+    while start > 0
+        && measure_text_width(&chars[start - 1..cursor].iter().collect::<String>()) <= before_budget
+    {
+        start -= 1;
+    }
+    let before: String = chars[start..cursor].iter().collect();
+    let mut line = format!("> {}{before}▏", if start > 0 { "…" } else { "" });
+    let remaining = width.saturating_sub(measure_text_width(&line));
+    if remaining > 0 {
+        line.push_str(&truncate_str(
+            &chars[cursor..].iter().collect::<String>(),
+            remaining,
+            "…",
+        ));
+    }
+    line
+}
+
+/// A horizontally scrolling path editor with immediate cancellation and no
+/// byte-based cursor calculations. Escape returns to the preparation plan.
+pub fn edit_path(term: &Term, initial: &str) -> io::Result<Option<String>> {
+    let mut chars: Vec<char> = initial.chars().collect();
+    let mut cursor = chars.len();
+    term.write_line(&format!("当前目录：{initial}"))?;
+    term.hide_cursor()?;
+    let _cursor = CursorGuard(term);
+    loop {
+        let (rows, columns) = term.size();
+        if rows < 4 || columns < 16 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "请放大终端窗口后修改目录",
+            ));
+        }
+        let width = usize::from(columns) - 1;
+        let frame = Frame {
+            lines: vec![
+                truncate_str("存储目录 · Enter 确认 · Ctrl+U 清空 · Esc 返回", width, "…")
+                    .into_owned(),
+                edit_line(&chars, cursor, width),
+            ],
+            active: 1..2,
+        };
+        for line in &frame.lines {
+            term.write_line(line)?;
+        }
+        term.flush()?;
+        let key = term.read_key_raw()?;
+        let (rows, columns) = term.size();
+        term.clear_last_lines(frame.clear_rows(rows.into(), columns.into()))?;
+        match key {
+            Key::CtrlC | Key::Char('\x03') => {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "用户取消"));
+            }
+            Key::Escape => return Ok(None),
+            Key::Enter => {
+                let value: String = chars.iter().collect();
+                return Ok(Some(if value.is_empty() {
+                    initial.to_owned()
+                } else {
+                    value
+                }));
+            }
+            Key::Char('\x15') => {
+                chars.clear();
+                cursor = 0;
+            }
+            Key::Home | Key::Char('\x01') => cursor = 0,
+            Key::End | Key::Char('\x05') => cursor = chars.len(),
+            Key::ArrowLeft => cursor = cursor.saturating_sub(1),
+            Key::ArrowRight => cursor = (cursor + 1).min(chars.len()),
+            Key::Backspace if cursor > 0 => {
+                cursor -= 1;
+                chars.remove(cursor);
+            }
+            Key::Del if cursor < chars.len() => {
+                chars.remove(cursor);
+            }
+            Key::Char(ch) if !ch.is_control() => {
+                chars.insert(cursor, ch);
+                cursor += 1;
+            }
+            _ => (),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn path_editor_keeps_unicode_cursor_inside_one_physical_row() {
+        let chars: Vec<char> = "D:\\模型 下载目录\\".repeat(12).chars().collect();
+        for width in [39, 79, 119] {
+            for cursor in 0..=chars.len() {
+                let line = edit_line(&chars, cursor, width);
+                assert!(measure_text_width(&line) <= width);
+                assert!(line.contains('▏'));
+            }
+        }
+    }
 
     fn model_items() -> Vec<String> {
         (0..12).map(|index| format!(

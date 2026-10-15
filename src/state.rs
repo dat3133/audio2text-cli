@@ -76,6 +76,10 @@ pub fn data_dir(value: Option<&Path>) -> Result<PathBuf> {
     if let Some(p) = std::env::var_os("AUDIO2TEXT_HOME") {
         return absolute(Path::new(&p));
     }
+    let base = platform_data_dir()?;
+    Ok(crate::storage::load(&base)?.unwrap_or(base))
+}
+pub fn platform_data_dir() -> Result<PathBuf> {
     let p = if cfg!(windows) {
         PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or_else(|| {
             AppError::new(

@@ -2,7 +2,7 @@
 
 本地语音转文字 CLI，支持音视频文件、批量转写和多步模型配置。可直接在终端使用，也可由 Claude Code、Codex 等 agent 调用；转写离线进行，不上传音频或正文。
 
-当前为 **0.1.0-beta.3 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.3)
+当前为 **0.1.0-beta.4 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.4)
 
 ## 快速开始
 
@@ -21,14 +21,14 @@ audio2text transcribe "meeting.m4a" --language zh --format text
 ```powershell
 audio2text --version
 # 固定到当前版本
-npm install -g audio2text-cli@0.1.0-beta.3
+npm install -g audio2text-cli@0.1.0-beta.4
 # npm 镜像未同步时，临时使用官方注册表
 npm install -g audio2text-cli@beta --registry=https://registry.npmjs.org
 ```
 
 ## 其他安装方式
 
-无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.3) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
+无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.4) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
 
 <details>
 <summary>Windows / Linux 安装脚本</summary>
@@ -37,7 +37,7 @@ Windows PowerShell：
 
 ```powershell
 $installer = Join-Path $PWD 'audio2text-install.ps1'
-Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.3/install.ps1' -OutFile $installer
+Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.4/install.ps1' -OutFile $installer
 & $installer
 # 跳过初始化向导：& $installer -NoInit
 ```
@@ -45,7 +45,7 @@ Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v
 Linux：
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.3/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.4/install.sh | sh
 # 跳过初始化向导：在上面的管道末尾使用 sh -s -- --no-init
 ```
 
@@ -57,16 +57,22 @@ curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/
 
 `audio2text init` 依次检测环境，并让你选择语言、均衡/准确率/速度偏好、模型及下载源。推荐模型会预选，仍可更换；高级配置可设置设备、数据目录、批大小和分段长度。方向键选择、Enter 确认，可返回上一步，Ctrl+C 取消。长模型说明按窗口宽度换行，菜单随选择滚动；窗口空间不足时改用编号选择，也可设置 `AUDIO2TEXT_PLAIN=1` 使用编号界面。
 
+在最后的“准备计划”页选择 **“修改存储目录（模型和运行环境）”**，即可将模型、运行环境、托管 Python、缓存和配置放到其他磁盘，例如 `D:\audio2text`。推荐模式也能修改；路径支持中文、空格和相对路径，显示为绝对路径。编辑时直接回车保留原值，Ctrl+U 清空，Esc 返回。页面会更新实际路径、下载量和目标磁盘可用空间，确认前不下载。
+
+初始化和自检成功后会记住通过页面修改的位置，后续直接运行 `audio2text doctor` 或 `transcribe` 即可；取消或失败保留原默认位置。切换目录不自动搬迁或删除旧资源，新位置已有资源经校验后复用；外部模型和 Python 环境保留原位置。
+
 ```powershell
 # 仅查看计划，不下载、不修改配置
 audio2text init --dry-run --profile balanced --language zh
 # 使用 CPU，适合无 NVIDIA GPU 的电脑
 audio2text init --non-interactive --model whisper/tiny --device cpu
-# 自定义模型、运行环境和配置的存储目录
+# 仅为本次命令覆盖存储目录
 audio2text --data-dir "./audio2text-data" init
 ```
 
-使用自定义目录时，后续命令继续传入相同的 `--data-dir`，或设置 `AUDIO2TEXT_HOME`。默认目录为 Windows 的 `%LOCALAPPDATA%\audio2text`，Linux 的 `$XDG_DATA_HOME/audio2text` 或 `~/.local/share/audio2text`。CUDA 需要 NVIDIA GPU 和兼容驱动；工具不安装 GPU 驱动。
+位置优先级为 `--data-dir` → `AUDIO2TEXT_HOME` → 页面保存的位置 → 平台默认目录。单独传入 `--data-dir` 不改变已记住的位置，后续仍需相同参数或环境变量；设置了 `AUDIO2TEXT_HOME` 时，它继续覆盖页面保存的位置。已保存目录不可用时会明确报错，可用显式参数恢复，不会悄悄改用 C 盘。
+
+平台默认目录为 Windows 的 `%LOCALAPPDATA%\audio2text`，Linux 的 `$XDG_DATA_HOME/audio2text` 或 `~/.local/share/audio2text`。通过页面选择其他位置后，原默认目录仅新增很小的 `location.json` 用于定位；已有文件保留。CUDA 需要 NVIDIA GPU 和兼容驱动；工具不安装 GPU 驱动。
 
 | 后端 | 可用模型 ID |
 |---|---|

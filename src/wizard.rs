@@ -1,7 +1,8 @@
 use crate::{
-    catalog, menu,
+    catalog, menu, runtime,
     setup::{self, Options, Settings},
     state::{self, AppError, Config, Result},
+    storage,
 };
 use console::Term;
 use dialoguer::{Input, theme::ColorfulTheme};
@@ -82,9 +83,64 @@ fn input(title: &str, default: String) -> Result<String> {
         .interact_on(&Term::stderr())
         .map_err(ui_error)
 }
+
+fn edit_storage(
+    root: &mut PathBuf,
+    cfg: &mut Config,
+    hw: &mut state::Hardware,
+    opts: &mut Options,
+) -> Result<bool> {
+    loop {
+        let Some(value) =
+            menu::edit_path(&Term::stderr(), &root.display().to_string()).map_err(ui_error)?
+        else {
+            return Ok(false);
+        };
+        let result: Result<_> = (|| {
+            let value = value.trim();
+            let value = value
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .unwrap_or(value);
+            let target = storage::validate(Path::new(value))?;
+            let target_cfg = Config::load(&target)?;
+            let target_hw = state::hardware(&target);
+            let mut choices = opts.clone();
+            choices.model = choices.model.or_else(|| cfg.default_model.clone());
+            choices.language.get_or_insert_with(|| cfg.language.clone());
+            choices.profile.get_or_insert_with(|| cfg.profile.clone());
+            choices.device.get_or_insert_with(|| cfg.device.clone());
+            choices.batch_size.get_or_insert_with(|| {
+                if cfg.batch_size == 0 {
+                    "auto".into()
+                } else {
+                    cfg.batch_size.to_string()
+                }
+            });
+            choices.segment_seconds.get_or_insert(cfg.segment_seconds);
+            let settings = setup::settings(&target, &target_cfg, &target_hw, &choices)?;
+            setup::plan(&settings)?;
+            Ok((target, target_cfg, target_hw, choices))
+        })();
+        match result {
+            Ok((target, target_cfg, target_hw, choices)) => {
+                let changed = *root != target;
+                *root = target;
+                *cfg = target_cfg;
+                *hw = target_hw;
+                *opts = choices;
+                return Ok(changed);
+            }
+            Err(e) => eprintln!("无法使用该目录：{}\n{}", e.message, e.hint),
+        }
+    }
+}
+
 pub fn run(root: &Path, cfg: &Config, opts: &Options) -> Result<Settings> {
     let mut root = root.to_path_buf();
+    let mut cfg = cfg.clone();
     let mut opts = opts.clone();
+    let mut remember_location = false;
     let mut advanced = false;
     let mut step: usize = 0;
     let mut show_all = false;
@@ -168,7 +224,7 @@ pub fn run(root: &Path, cfg: &Config, opts: &Options) -> Result<Settings> {
             3 => {
                 let listing = catalog::listing(
                     &hw,
-                    cfg,
+                    &cfg,
                     opts.device.as_deref().unwrap_or(&cfg.device),
                     opts.language.as_deref().unwrap_or(&cfg.language),
                     opts.profile.as_deref().unwrap_or(&cfg.profile),
@@ -261,11 +317,8 @@ pub fn run(root: &Path, cfg: &Config, opts: &Options) -> Result<Settings> {
                         if let Some(index) = choose("重新选择运行设备", &devices, 0, true)?
                         {
                             opts.device = Some(devices[index].clone());
-                            root = state::absolute(Path::new(&input(
-                                "数据目录",
-                                root.display().to_string(),
-                            )?))?;
-                            hw = state::hardware(&root);
+                            remember_location |=
+                                edit_storage(&mut root, &mut cfg, &mut hw, &mut opts)?;
                             show_all = false;
                         }
                         continue;
@@ -328,8 +381,7 @@ pub fn run(root: &Path, cfg: &Config, opts: &Options) -> Result<Settings> {
                         true,
                     )? {
                         opts.device = Some(devices[i].clone());
-                        let path = input("数据目录", root.display().to_string())?;
-                        root = state::absolute(Path::new(&path))?;
+                        remember_location |= edit_storage(&mut root, &mut cfg, &mut hw, &mut opts)?;
                         opts.batch_size = Some(input(
                             "批大小：auto 或 1–32",
                             opts.batch_size.clone().unwrap_or_else(|| {
@@ -354,7 +406,7 @@ pub fn run(root: &Path, cfg: &Config, opts: &Options) -> Result<Settings> {
                             }
                         }
                         hw = state::hardware(&root);
-                        if let Err(e) = setup::settings(&root, cfg, &hw, &opts) {
+                        if let Err(e) = setup::settings(&root, &cfg, &hw, &opts) {
                             eprintln!("{}", e.message);
                             continue;
                         }
@@ -364,7 +416,7 @@ pub fn run(root: &Path, cfg: &Config, opts: &Options) -> Result<Settings> {
                 }
             }
             6 => {
-                let s = match setup::settings(&root, cfg, &hw, &opts) {
+                let mut s = match setup::settings(&root, &cfg, &hw, &opts) {
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!("{}", e.message);
@@ -375,37 +427,83 @@ pub fn run(root: &Path, cfg: &Config, opts: &Options) -> Result<Settings> {
                 let p = match setup::plan(&s) {
                     Ok(p) => p,
                     Err(e) => {
-                        eprintln!("{}", e.message);
-                        step = 3;
+                        eprintln!("准备计划不可用：{}\n{}", e.message, e.hint);
+                        match choose(
+                            "修改准备计划",
+                            &[
+                                "修改存储目录（模型和运行环境）".into(),
+                                "返回模型选择".into(),
+                                "取消".into(),
+                            ],
+                            0,
+                            true,
+                        )? {
+                            Some(0) => {
+                                remember_location |=
+                                    edit_storage(&mut root, &mut cfg, &mut hw, &mut opts)?
+                            }
+                            Some(2) => return Err(ui_error("用户取消")),
+                            _ => step = 3,
+                        }
                         continue;
                     }
                 };
                 eprintln!(
-                    "\n准备计划\n模型：{}\n设备：{}\n语言：{}\n模型下载：{:.2} GiB\n运行时下载估计：{:.2} GiB\n目录：{}\n将设置默认模型：{}",
+                    "\n准备计划\n模型：{}\n设备：{}\n语言：{}\n模型下载：{:.2} GiB\n运行时下载估计：{:.2} GiB\n存储根目录：{}\n模型目录：{}\n运行环境目录：{}\n目标磁盘可用：{}\n将设置默认模型：{}",
                     s.model,
                     s.device,
                     s.language,
                     p["model_download_bytes"].as_u64().unwrap() as f64 / 1024f64.powi(3),
                     p["runtime_download_estimate_bytes"].as_u64().unwrap() as f64 / 1024f64.powi(3),
                     s.root.display(),
+                    p["model_path"].as_str().unwrap(),
+                    p["runtime_path"].as_str().unwrap(),
+                    p["disk_available_bytes"]
+                        .as_u64()
+                        .map(|bytes| format!("{:.2} GiB", bytes as f64 / 1024f64.powi(3)))
+                        .unwrap_or_else(|| "未知，请确认磁盘空间".into()),
                     s.model
                 );
+                if let Some(py) = &s.runtime_python {
+                    eprintln!("外部 Python：{}（保留原位置）", py.display());
+                } else if let Ok(py) =
+                    runtime::python(&root, &catalog::find(&s.model)?.backend, &s.device)
+                {
+                    eprintln!("当前 Python：{}", py.display());
+                }
+                if remember_location {
+                    eprintln!("自检成功后将记住此存储位置；旧目录内容保留，不自动搬迁或删除。");
+                    if let Some(value) = std::env::var_os("AUDIO2TEXT_HOME") {
+                        eprintln!(
+                            "注意：AUDIO2TEXT_HOME={} 仍优先于已记住的位置；后续命令需使用相同 --data-dir 或调整环境变量。",
+                            PathBuf::from(value).display()
+                        );
+                    }
+                }
                 match choose(
                     "确认以上选择",
                     &[
                         "开始准备并自检".into(),
+                        "修改存储目录（模型和运行环境）".into(),
                         "返回模型选择".into(),
                         "取消".into(),
                     ],
                     0,
                     true,
                 )? {
-                    Some(0) => return Ok(s),
+                    Some(0) => {
+                        s.remember_location = remember_location;
+                        return Ok(s);
+                    }
                     Some(1) => {
+                        remember_location |= edit_storage(&mut root, &mut cfg, &mut hw, &mut opts)?;
+                        continue;
+                    }
+                    Some(2) => {
                         step = 3;
                         continue;
                     }
-                    Some(2) => return Err(ui_error("用户取消")),
+                    Some(3) => return Err(ui_error("用户取消")),
                     _ => back = true,
                 }
             }

@@ -1,6 +1,6 @@
 {
   "name": "audio2text-cli",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "Local speech-to-text CLI with guided setup and agent-friendly JSON",
   "license": "Apache-2.0",
   "repository": {"type": "git", "url": "git+https://github.com/dat3133/audio2text-cli.git"},

@@ -175,6 +175,31 @@ pub fn assess(
     lang: &str,
     installed: bool,
 ) -> (String, Vec<String>) {
+    let runtime_budget = if dev == "cpu" && m.backend == "faster-whisper" {
+        1_000_000_000
+    } else {
+        9_000_000_000
+    };
+    assess_required(
+        m,
+        hw,
+        dev,
+        lang,
+        if installed {
+            0
+        } else {
+            m.bytes() + runtime_budget
+        },
+    )
+}
+
+pub fn assess_required(
+    m: &Model,
+    hw: &Hardware,
+    dev: &str,
+    lang: &str,
+    required_bytes: u64,
+) -> (String, Vec<String>) {
     let mut reasons = vec![];
     if hw.arch != "x86_64" || !["windows", "linux"].contains(&hw.os.as_str()) {
         return (
@@ -188,16 +213,7 @@ pub fn assess(
             vec![format!("模型不支持语言 {lang}")],
         );
     }
-    let runtime_budget = if dev == "cpu" && m.backend == "faster-whisper" {
-        1_000_000_000
-    } else {
-        9_000_000_000
-    };
-    if !installed
-        && hw
-            .disk_available_bytes
-            .is_some_and(|n| n < m.bytes() + runtime_budget)
-    {
+    if hw.disk_available_bytes.is_some_and(|n| n < required_bytes) {
         return (
             "incompatible".into(),
             vec!["磁盘空间不足（包含运行时预留）".into()],
