@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from release_common import ROOT, npm_command
@@ -143,4 +144,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # Hosted Windows pipes can default to cp1252; fixtures deliberately use Unicode.
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     main()
