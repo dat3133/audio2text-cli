@@ -100,36 +100,38 @@ Update the public support status and known limitations in README when these chec
 
 ## Release workflow
 
-Preview releases use matching `v<version>` tags and `beta` npm dist-tags. Synchronize Cargo.toml, Cargo.lock, npm/package.json and both installers' default version, commit the source, then create and push the matching tag. Run `release.yml` on that tag; the workflow rejects branch refs and mismatched versions. The command below illustrates the first publication, without automatic npm publishing:
+Releases use matching `v<version>` tags. The version determines the publication channel:
+
+| Version | GitHub Release | npm dist-tag |
+|---|---|---|
+| `X.Y.Z` | Stable, marked Latest | `latest` |
+| `X.Y.Z-beta.N` | Prerelease, not Latest | `beta` |
+
+Synchronize Cargo.toml, Cargo.lock, npm/package.json and both installers' default version. Set npm `publishConfig.tag` to the matching channel, commit the source, then create and push the matching tag. Run `release.yml` on that tag; the workflow rejects branch refs, unsupported version formats and mismatched versions/channels. With the configured trusted publisher, publish the verified npm tarball too:
 
 ```powershell
-gh workflow run release.yml --ref v0.1.0-beta.2 -f publish_npm=false
+gh workflow run release.yml --ref v0.1.0 -f publish_npm=true
 ```
 
-The workflow validates, tests and builds both platforms, performs local installation checks, and assembles the exact platform-neutral npm tarball. It creates a GitHub draft, uploads and verifies every asset against SHA256SUMS, publishes a prerelease without marking it Latest, then verifies anonymous Windows/Linux installation. Packaging uses fresh directories and an explicit file whitelist. The npm package contains the launcher, version/checksum metadata, README and license notices; native executables, model weights and inference runtimes are excluded.
+The workflow validates, tests and builds both platforms, performs local installation checks, and assembles the exact platform-neutral npm tarball. It creates a GitHub draft, uploads and verifies every asset against SHA256SUMS, publishes with the version-derived flags, then verifies anonymous Windows/Linux installation before npm publication. Packaging uses fresh directories and an explicit file whitelist. The npm package contains the launcher, version/checksum metadata, README and license notices; native executables, model weights and inference runtimes are excluded.
 
 For the first npm publication, download all verified GitHub Release assets to `dist/release`, enable npm account 2FA and authenticate against the official registry:
 
 ```powershell
 npm login --registry=https://registry.npmjs.org
-python scripts/check-release.py --tag v0.1.0-beta.2 --directory dist/release
+python scripts/check-release.py --tag v0.1.0 --directory dist/release
 python scripts/publish-npm.py
 ```
 
-Publishing may require an additional browser verification. The helper uploads the same verified tarball with `--tag beta --access public`, waits for registry availability, and compares published integrity and tags. Same-version retries verify and reuse identical content without uploading again; different bytes require a new version. Use `--verify-only` for read-only verification. Release tooling explicitly targets registry.npmjs.org without changing user mirror settings.
+Local publishing may require an additional browser verification. The helper uploads the same verified tarball with `--tag latest` for stable versions or `--tag beta` for previews, always with `--access public`, waits for registry availability, and compares published integrity and tags. It snapshots the other channel before publication and checks it remains unchanged. Same-version retries verify and reuse identical content without uploading again; different bytes require a new version. Use `--verify-only` for read-only verification. Release tooling explicitly targets registry.npmjs.org without changing user mirror settings.
 
-Normally, run `npm-smoke.yml` on the release tag to check registry installation. Registry smoke checks compare the downloaded tarball with the immutable GitHub Release checksum and cover normal installation plus first launch after `--ignore-scripts`. The accepted first-publication tag exception below uses updated checks from `main`, preserving the existing release tag.
+Normally, run `npm-smoke.yml` on the matching release tag to check registry installation. Registry smoke checks verify the version's channel, compare the downloaded tarball with the immutable GitHub Release checksum, and cover normal installation plus first launch after `--ignore-scripts`. The release workflow runs these checks on both platforms after npm publication.
 
 ### First-publication tag exception
 
-The npm registry assigned both `beta` and `latest` to `0.1.0-beta.2` despite publishing with `--tag beta`. Two authenticated `npm dist-tag rm audio2text-cli latest` attempts returned HTTP 400; the response gave no detailed explanation. The npm CLI repository has a [report of the same behavior](https://github.com/npm/cli/issues/8490). This first-publication exception was accepted; it does not establish a stable release. Keep user installation examples explicit about `@beta` or the exact preview version.
+The npm registry assigned both `beta` and `latest` to `0.1.0-beta.2` despite publishing with `--tag beta`. Two authenticated `npm dist-tag rm audio2text-cli latest` attempts returned HTTP 400; the response gave no detailed explanation. The npm CLI repository has a [report of the same behavior](https://github.com/npm/cli/issues/8490). This first-publication exception was accepted for the preview; it did not establish a stable release. Publishing `0.1.0` intentionally advances `latest` to the stable version and retains the existing `beta` tag.
 
-```powershell
-python scripts/publish-npm.py --verify-only --allow-initial-latest
-gh workflow run npm-smoke.yml --ref main -f release_tag=v0.1.0-beta.2 -f allow_initial_latest=true
-```
-
-This explicit exception is limited to one actual published version, excluding the registry's `0.0.0-stage` placeholder. Later preview releases must pass the default strict tag check. Do not republish an existing version or change its assets to repair metadata; use a new version for payload changes. Future npm packages automatically use the repository README at packaging time; editing the repository does not change the README inside an already published tarball.
+The legacy `--allow-initial-latest` exception is limited to one actual published preview version, excluding the registry's `0.0.0-stage` placeholder. Later preview releases must pass the default strict tag check. Do not republish an existing version or change its assets to repair metadata; use a new version for payload changes. Future npm packages automatically use the repository README at packaging time; editing the repository does not change the README inside an already published tarball.
 
 ### Trusted publishing
 

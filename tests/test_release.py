@@ -9,11 +9,11 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
-from release_common import BINARIES, NPM_FILES, npm_command, read_sums, validate_version, verify_npm_tags, verify_release, version
+from release_common import BINARIES, NPM_FILES, github_release_flags, npm_command, read_sums, release_channel, validate_version, verify_npm_tags, verify_release, version
 
 class ReleaseTests(unittest.TestCase):
     def test_latest_exception_is_explicit_and_first_publication_only(self):
-        preview=version()
+        preview='0.1.0-beta.6'
         metadata={"dist-tags":{"beta":preview},"versions":["0.0.0-stage",preview]}
         self.assertFalse(verify_npm_tags(metadata,preview))
         metadata['dist-tags']['latest']=preview
@@ -56,6 +56,49 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(validate_version("v"+version()),version())
         with self.assertRaises(ValueError):
             validate_version("v0.0.0-beta.1")
+
+    def test_stable_and_preview_channels(self):
+        for value, channel in [('0.1.0','latest'),('1.2.3','latest'),('0.1.0-beta.6','beta'),('1.2.3-beta.0','beta')]:
+            with self.subTest(version=value):
+                self.assertEqual(release_channel(value),channel)
+                preview=channel == 'beta'
+                self.assertEqual(github_release_flags(value),[f'--prerelease={str(preview).lower()}',f'--latest={str(not preview).lower()}'])
+                self.assertEqual(github_release_flags(value,draft=True),[f'--prerelease={str(preview).lower()}','--latest=false'])
+        for value in ['v0.1.0','01.2.3','1.02.3','1.2.03','1.2.3-beta.01','1.2','1.2.3-rc.1','1.2.3+build','1.2.3-beta.1\n']:
+            with self.subTest(invalid=value), self.assertRaises(ValueError):
+                release_channel(value)
+
+    def test_stable_tags_require_latest_and_keep_beta_separate(self):
+        metadata={'dist-tags':{'latest':'0.1.0','beta':'0.1.0-beta.6'}}
+        self.assertFalse(verify_npm_tags(metadata,'0.1.0'))
+        metadata['dist-tags']['latest']='0.1.0-beta.2'
+        with self.assertRaises(ValueError):
+            verify_npm_tags(metadata,'0.1.0',allow_initial_latest=True)
+        metadata['dist-tags']={'latest':'0.1.0','beta':'0.1.0'}
+        with self.assertRaises(ValueError):
+            verify_npm_tags(metadata,'0.1.0')
+
+    def test_version_metadata_requires_matching_channel(self):
+        from unittest.mock import patch
+        import release_common
+        work=ROOT/'.test-data'/('version-'+uuid.uuid4().hex)
+        (work/'npm').mkdir(parents=True)
+        for value, channel in [('0.1.0','latest'),('0.1.0-beta.6','beta')]:
+            with self.subTest(version=value):
+                (work/'Cargo.toml').write_text(f'[package]\nversion="{value}"\n',encoding='utf-8')
+                (work/'Cargo.lock').write_text(f'[[package]]\nname="audio2text"\nversion="{value}"\n',encoding='utf-8')
+                (work/'install.ps1').write_text(f"$Version = '{value}'\n",encoding='utf-8')
+                (work/'install.sh').write_text(f"version='{value}'\n",encoding='utf-8')
+                package={'version':value,'publishConfig':{'tag':channel}}
+                (work/'npm/package.json').write_text(json.dumps(package),encoding='utf-8')
+                with patch.object(release_common,'ROOT',work):
+                    self.assertEqual(validate_version('v'+value),value)
+                    with self.assertRaises(ValueError):
+                        validate_version('v9.9.9')
+                    package['publishConfig']['tag']='beta' if channel == 'latest' else 'latest'
+                    (work/'npm/package.json').write_text(json.dumps(package),encoding='utf-8')
+                    with self.assertRaisesRegex(ValueError,'publishConfig.tag'):
+                        validate_version('v'+value)
 
     def test_checksum_manifest_rejects_duplicates_and_paths(self):
         work=ROOT/".test-data"/("manifest-"+uuid.uuid4().hex)

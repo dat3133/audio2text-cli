@@ -12,7 +12,7 @@ Run commands on the host that can access the media files and the installed runti
 Check `audio2text --version`. If the command is missing, explain the required installation and continue when covered by the user's authorization. The npm entry requires Node.js 18+:
 
 ```sh
-npm install -g audio2text-cli@beta --registry=https://registry.npmjs.org
+npm install -g audio2text-cli --registry=https://registry.npmjs.org
 ```
 
 If npm is unavailable, the [project installation guide](https://github.com/dat3133/audio2text-cli#快速开始) also provides native installers and executables. Installing this skill only installs instructions; it does not install the CLI, models, or inference dependencies.

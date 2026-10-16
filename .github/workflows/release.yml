@@ -1,4 +1,4 @@
-name: Publish preview release
+name: Publish release
 on:
   workflow_dispatch:
     inputs:

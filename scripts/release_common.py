@@ -18,14 +18,28 @@ NPM_FILES = {"package/" + name for name in ("LICENSE", "README.md", "THIRD_PARTY
 def version():
     return tomllib.loads((ROOT / "Cargo.toml").read_text("utf-8"))["package"]["version"]
 
+def release_channel(value):
+    number = r"(?:0|[1-9][0-9]*)"
+    if not re.fullmatch(rf"{number}\.{number}\.{number}(?:-beta\.{number})?", value):
+        raise ValueError("Expected X.Y.Z or X.Y.Z-beta.N")
+    return "beta" if "-beta." in value else "latest"
+
+
+def github_release_flags(value, draft=False):
+    preview = release_channel(value) == "beta"
+    return [f"--prerelease={str(preview).lower()}", f"--latest={str(not preview and not draft).lower()}"]
+
+
 def validate_version(tag=None):
     value = version()
-    if not re.fullmatch(r"\d+\.\d+\.\d+-beta\.\d+", value):
-        raise ValueError("This workflow publishes beta previews only")
+    channel = release_channel(value)
     if tag is not None and tag != "v" + value:
         raise ValueError("Git tag does not match the source version")
-    if json.loads((ROOT / "npm/package.json").read_text("utf-8"))["version"] != value:
+    package = json.loads((ROOT / "npm/package.json").read_text("utf-8"))
+    if package["version"] != value:
         raise ValueError("npm and Cargo versions differ")
+    if package.get("publishConfig", {}).get("tag") != channel:
+        raise ValueError("npm publishConfig.tag differs from the release channel")
     packages = tomllib.loads((ROOT / "Cargo.lock").read_text("utf-8"))["package"]
     if next(p["version"] for p in packages if p["name"] == "audio2text") != value:
         raise ValueError("Cargo.lock version differs")
@@ -48,8 +62,13 @@ def npm_command(*args):
 
 def verify_npm_tags(metadata, value, allow_initial_latest=False):
     tags = metadata["dist-tags"]
-    if tags.get("beta") != value:
-        raise ValueError("npm beta tag differs from the verified version")
+    channel = release_channel(value)
+    if tags.get(channel) != value:
+        raise ValueError(f"npm {channel} tag differs from the verified version")
+    if channel == "latest":
+        if tags.get("beta") == value:
+            raise ValueError("Stable release must not replace the beta tag")
+        return False
     if tags.get("latest") != value:
         return False
     if not allow_initial_latest:
@@ -95,6 +114,8 @@ def verify_release(directory):
         metadata = json.load(archive.extractfile("package/release.json"))
         if pkg["name"] != "audio2text-cli" or pkg["version"] != value or metadata["version"] != value or metadata["repository"] != REPOSITORY:
             raise ValueError("npm package identity/version mismatch")
+        if pkg.get("publishConfig", {}).get("tag") != release_channel(value):
+            raise ValueError("Packaged npm publishConfig.tag differs from the release channel")
         if metadata["assets"] != {name:sums[name] for name in BINARIES}:
             raise ValueError("Embedded executable checksums differ from release assets")
     return sums

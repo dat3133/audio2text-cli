@@ -2,16 +2,16 @@
 
 本地语音转文字 CLI，支持音视频文件、批量转写和多步模型配置。可直接在终端使用，也可由 Claude Code、Codex 等 agent 调用；转写离线进行，不上传音频或正文。
 
-当前为 **0.1.0-beta.6 预览版本**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.6)
+当前正式版本为 **0.1.0**，支持 **Windows/Linux x86_64**。[npm 包](https://www.npmjs.com/package/audio2text-cli) · [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0)
 
-此版本修复 Windows 使用 faster-whisper CUDA 时，转写完成后因模型释放而报 `WORKER_FAILED` 的问题。升级 CLI 即可复用现有模型、运行环境和存储目录，无需重新初始化。
+正式版包含 beta.6 中 Windows 使用 faster-whisper CUDA 时，转写完成后因模型释放而报 `WORKER_FAILED` 的修复。升级 CLI 即可复用现有模型、运行环境和存储目录，无需重新初始化。
 
 ## 快速开始
 
 npm 安装需要 **Node.js 18+ 和 npm**，无需预装 Python、Conda 或 FFmpeg。在终端执行：
 
 ```powershell
-npm install -g audio2text-cli@beta
+npm install -g audio2text-cli
 audio2text init
 audio2text transcribe "meeting.m4a" --language zh --format text
 ```
@@ -20,19 +20,19 @@ audio2text transcribe "meeting.m4a" --language zh --format text
 
 下载时终端会显示进度：模型文件显示百分比和已下载/总大小，Python 及依赖使用 uv 原生进度，随后分别进行校验、安装和自检。续传按已有字节继续，缓存资源跳过下载。输出重定向、终端能力不足或设置 `AUDIO2TEXT_PLAIN=1` 时使用普通日志；进度和日志均写入 stderr，不影响 JSON 结果。
 
-当前仍为预览版，请明确安装 `@beta` 或固定版本；首发的 `latest` 标签也指向预览版。
+默认安装正式版；`@beta` 用于预览通道，也可指定版本安装。
 
 ```powershell
 audio2text --version
 # 固定到当前版本
-npm install -g audio2text-cli@0.1.0-beta.6
+npm install -g audio2text-cli@0.1.0
 # npm 镜像未同步时，临时使用官方注册表
-npm install -g audio2text-cli@beta --registry=https://registry.npmjs.org
+npm install -g audio2text-cli --registry=https://registry.npmjs.org
 ```
 
 ## 其他安装方式
 
-无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0-beta.6) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
+无需 Node.js，也可使用安装脚本或从 [GitHub Release](https://github.com/dat3133/audio2text-cli/releases/tag/v0.1.0) 下载对应平台的程序；直接下载后将程序命名为 `audio2text.exe`（Windows）或 `audio2text`（Linux），加入 PATH，并运行 `audio2text init`。Linux 程序还需赋予执行权限。
 
 <details>
 <summary>Windows / Linux 安装脚本</summary>
@@ -41,7 +41,7 @@ Windows PowerShell：
 
 ```powershell
 $installer = Join-Path $PWD 'audio2text-install.ps1'
-Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.6/install.ps1' -OutFile $installer
+Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0/install.ps1' -OutFile $installer
 & $installer
 # 跳过初始化向导：& $installer -NoInit
 ```
@@ -49,7 +49,7 @@ Invoke-WebRequest 'https://github.com/dat3133/audio2text-cli/releases/download/v
 Linux：
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0-beta.6/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/dat3133/audio2text-cli/releases/download/v0.1.0/install.sh | sh
 # 跳过初始化向导：在上面的管道末尾使用 sh -s -- --no-init
 ```
 
@@ -164,11 +164,11 @@ stdout 返回一个 JSON 对象，进度与日志在 stderr。成功结果示例
 | 问题 | 处理方式 |
 |---|---|
 | 找不到 `audio2text` 命令 | 重开终端，确认 npm 全局命令目录或脚本安装目录已加入 PATH。 |
-| npm 找不到 beta 版本 | 使用快速开始中的官方注册表安装命令。 |
+| npm 找不到版本或镜像尚未同步 | 使用快速开始中的官方注册表安装命令。 |
 | 模型或环境未就绪 | 运行 `audio2text doctor`，再执行 `audio2text init`；转写不会自动初始化。 |
 | 显存或内存不足 | 减小 `--batch-size` 或 `--segment-seconds`；需要更小模型或 CPU 环境时，通过 `init` 明确重新选择。 |
 
-当前支持 Windows/Linux x86_64，Linux 程序使用 glibc，暂不支持 macOS、ARM 或 Alpine/musl。两平台安装已有验证，Linux 完整推理、默认托管 CUDA 环境及全部模型规格仍待补齐。推荐排序和资源估计仅供选型参考，尚无自然录音准确率基准；混合语言结果需复核，返回 `ok` 表示流程成功，不保证正文准确。
+当前支持 Windows/Linux x86_64，Linux 程序使用 glibc，暂不支持 macOS、ARM 或 Alpine/musl。两平台构建、安装及自动化检查已有验证，Windows CUDA 转写已通过实机检查，Linux 转写已由维护者实测；这些验证未覆盖全部模型、GPU 和驱动组合。推荐排序和资源估计仅供选型参考，尚无自然录音准确率基准；混合语言结果需复核，返回 `ok` 表示流程成功，不保证正文准确。
 
 暂不提供实时录音、流式识别、字幕、词级时间戳、说话人分离、云端 ASR、MCP 或常驻推理服务。更多参数可通过 `audio2text --help`、`audio2text init --help` 和 `audio2text transcribe --help` 查看；问题反馈请使用 [GitHub Issues](https://github.com/dat3133/audio2text-cli/issues)。
 
